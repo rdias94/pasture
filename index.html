@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plano Agronômico — Correção & Adubação</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --green: #1a7a52;
+  --green-light: #e8f5ee;
+  --green-mid: #2da06b;
+  --amber: #b86c00;
+  --amber-light: #fff4e0;
+  --red: #c0392b;
+  --red-light: #fdf0ee;
+  --gray-50: #f8f7f4;
+  --gray-100: #eeecea;
+  --gray-200: #dddbd7;
+  --gray-400: #9b9790;
+  --gray-600: #5a5750;
+  --gray-900: #1c1b18;
+  --font: 'IBM Plex Sans', sans-serif;
+  --mono: 'IBM Plex Mono', monospace;
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font); background: var(--gray-50); color: var(--gray-900); font-size: 14px; line-height: 1.5; min-height: 100vh; }
+
+/* LAYOUT */
+.app-shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+.sidebar { background: var(--gray-900); padding: 0; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.sidebar-logo { padding: 24px 20px 20px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.sidebar-logo h1 { font-size: 13px; font-weight: 600; color: #fff; letter-spacing: 0.05em; text-transform: uppercase; }
+.sidebar-logo p { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 2px; font-family: var(--mono); }
+.sidebar-nav { padding: 16px 0; flex: 1; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; cursor: pointer; color: rgba(255,255,255,0.5); font-size: 13px; transition: all 0.15s; border-left: 2px solid transparent; }
+.nav-item:hover { color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.04); }
+.nav-item.active { color: #fff; border-left-color: var(--green-mid); background: rgba(255,255,255,0.06); }
+.nav-item .nav-num { font-family: var(--mono); font-size: 10px; color: rgba(255,255,255,0.25); margin-left: auto; }
+.nav-item.done .nav-num { color: var(--green-mid); }
+.main { padding: 32px 40px; max-width: 1100px; }
+.page-header { margin-bottom: 28px; }
+.page-header h2 { font-size: 22px; font-weight: 600; color: var(--gray-900); }
+.page-header p { font-size: 13px; color: var(--gray-400); margin-top: 4px; }
+
+/* PANELS */
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* CARDS */
+.card { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 16px; }
+.card-title { font-size: 13px; font-weight: 600; color: var(--gray-900); letter-spacing: 0.02em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.card-title .ct-icon { width: 22px; height: 22px; background: var(--green-light); border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+
+/* FORM */
+.fg { display: grid; gap: 12px; margin-bottom: 12px; }
+.fg-2 { grid-template-columns: 1fr 1fr; }
+.fg-3 { grid-template-columns: 1fr 1fr 1fr; }
+.fg-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+.field label { font-size: 11px; font-weight: 500; color: var(--gray-400); letter-spacing: 0.04em; text-transform: uppercase; display: block; margin-bottom: 5px; }
+.field input, .field select, .field textarea {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--gray-200); border-radius: var(--radius);
+  font-family: var(--font); font-size: 13px; color: var(--gray-900); background: #fff; outline: none; transition: border 0.15s;
+}
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(26,122,82,0.08); }
+.field textarea { resize: vertical; min-height: 80px; }
+
+/* TAGS */
+.tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { padding: 5px 12px; border-radius: 20px; border: 1px solid var(--gray-200); font-size: 12px; cursor: pointer; background: #fff; color: var(--gray-600); transition: all 0.15s; user-select: none; font-family: var(--font); }
+.tag:hover { border-color: var(--green); color: var(--green); }
+.tag.on { background: var(--green-light); border-color: var(--green); color: var(--green); font-weight: 500; }
+.tag.on-amber { background: var(--amber-light); border-color: var(--amber); color: var(--amber); font-weight: 500; }
+
+/* BUTTONS */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: var(--radius); border: 1px solid var(--gray-200); font-family: var(--font); font-size: 13px; cursor: pointer; background: #fff; color: var(--gray-900); transition: all 0.15s; font-weight: 500; }
+.btn:hover { background: var(--gray-50); border-color: var(--gray-400); }
+.btn-primary { background: var(--green); border-color: var(--green); color: #fff; }
+.btn-primary:hover { background: #155f3f; border-color: #155f3f; }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-ghost { border-style: dashed; color: var(--green); }
+.btn-ghost:hover { background: var(--green-light); border-color: var(--green); border-style: dashed; }
+.btn-icon { padding: 6px; width: 30px; height: 30px; justify-content: center; }
+.nav-btns { display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--gray-100); }
+
+/* GRID DE ÁREAS */
+.grid-wrap { overflow-x: auto; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); }
+.areas-table { border-collapse: collapse; min-width: 100%; font-size: 12px; }
+.areas-table th { background: var(--gray-50); padding: 8px 10px; font-size: 10px; font-weight: 600; color: var(--gray-400); letter-spacing: 0.05em; text-transform: uppercase; border-bottom: 1px solid var(--gray-200); border-right: 1px solid var(--gray-100); white-space: nowrap; text-align: center; }
+.areas-table th.th-fixed { text-align: left; position: sticky; left: 0; z-index: 3; background: var(--gray-50); }
+.areas-table th.th-month { min-width: 54px; font-family: var(--mono); font-size: 10px; }
+.areas-table td { padding: 6px 8px; border-bottom: 1px solid var(--gray-100); border-right: 1px solid var(--gray-100); vertical-align: middle; background: #fff; }
+.areas-table td.td-fixed { position: sticky; left: 0; z-index: 1; background: var(--gray-50); font-weight: 500; min-width: 110px; }
+.areas-table tr:last-child td { border-bottom: none; }
+.areas-table input[type=number], .areas-table input[type=text] {
+  border: none; background: transparent; font-size: 12px; width: 100%; padding: 2px 3px; outline: none; color: var(--gray-900); font-family: var(--font);
+}
+.areas-table input:focus { background: var(--green-light); border-radius: 4px; }
+.areas-table select { border: none; background: transparent; font-size: 11px; width: 100%; color: var(--gray-900); font-family: var(--font); outline: none; cursor: pointer; }
+.areas-table select:focus { background: var(--green-light); border-radius: 3px; }
+.month-input { text-align: center; }
+.col-silagem { color: var(--amber) !important; }
+
+/* BALANÇO */
+.balanco-strip { display: flex; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); overflow: hidden; margin-top: 12px; }
+.bal-col { flex: 1; border-right: 1px solid var(--gray-100); text-align: center; min-width: 54px; }
+.bal-col:last-child { border-right: none; }
+.bal-mes { font-size: 10px; font-weight: 600; color: var(--gray-400); padding: 6px 4px; background: var(--gray-50); border-bottom: 1px solid var(--gray-100); font-family: var(--mono); letter-spacing: 0.03em; }
+.bal-val { font-size: 12px; font-weight: 600; padding: 7px 4px; font-family: var(--mono); }
+.bal-pos { color: var(--green); background: #f0faf5; }
+.bal-neg { color: var(--red); background: var(--red-light); }
+.bal-zero { color: var(--gray-400); }
+
+/* SEQUESTRO */
+.seq-card { background: var(--amber-light); border: 1px solid #f0d4a0; border-radius: var(--radius-lg); padding: 16px; margin-top: 8px; }
+.seq-title { font-size: 12px; font-weight: 600; color: var(--amber); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 12px; }
+.seq-month-btn { padding: 4px 10px; border-radius: 16px; border: 1px solid #d4a855; font-size: 11px; cursor: pointer; background: #fff; color: var(--amber); transition: all 0.15s; font-family: var(--mono); }
+.seq-month-btn.on { background: var(--amber); color: #fff; border-color: var(--amber); }
+.seq-result { font-size: 13px; color: var(--amber); font-weight: 500; margin-top: 10px; font-family: var(--mono); }
+
+/* UPLOAD */
+.upload-zone { border: 2px dashed var(--gray-200); border-radius: var(--radius-lg); padding: 28px; text-align: center; cursor: pointer; transition: all 0.2s; }
+.upload-zone:hover, .upload-zone.drag { border-color: var(--green); background: var(--green-light); }
+.upload-icon { font-size: 32px; color: var(--gray-400); margin-bottom: 8px; }
+.upload-zone p { font-size: 13px; color: var(--gray-400); }
+.upload-zone .sub { font-size: 11px; color: var(--gray-200); margin-top: 4px; }
+.file-list { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.file-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #fff; border: 1px solid var(--gray-100); border-radius: var(--radius); font-size: 12px; }
+.file-item .fname { flex: 1; font-weight: 500; }
+.file-item .fsize { color: var(--gray-400); font-family: var(--mono); font-size: 11px; }
+.file-item .rm { cursor: pointer; color: var(--gray-200); font-size: 14px; transition: color 0.15s; }
+.file-item .rm:hover { color: var(--red); }
+
+/* COTAÇÕES */
+.cot-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+/* SUMMARY */
+.sum-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--gray-100); font-size: 13px; }
+.sum-row:last-child { border-bottom: none; }
+.sum-row .sl { color: var(--gray-400); }
+.sum-row .sv { font-weight: 500; }
+
+/* OUTPUT */
+.output-box { background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius-lg); padding: 20px; font-size: 13px; line-height: 1.8; min-height: 200px; white-space: pre-wrap; font-family: var(--mono); color: var(--gray-900); }
+.thinking { display: flex; align-items: center; gap: 10px; color: var(--gray-400); font-size: 13px; }
+.dots { display: flex; gap: 4px; }
+.dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: bounce 1.2s infinite; }
+.dots span:nth-child(2) { animation-delay: .2s; }
+.dots span:nth-child(3) { animation-delay: .4s; }
+@keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+.export-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+/* PILL */
+.pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; font-family: var(--mono); }
+.pill-green { background: var(--green-light); color: var(--green); }
+.pill-amber { background: var(--amber-light); color: var(--amber); }
+.pill-red { background: var(--red-light); color: var(--red); }
+
+/* ALERT */
+.alert { padding: 10px 14px; border-radius: var(--radius); font-size: 12px; margin-top: 10px; }
+.alert-amber { background: var(--amber-light); border: 1px solid #f0d4a0; color: var(--amber); }
+.alert-red { background: var(--red-light); border: 1px solid #f5c5bf; color: var(--red); }
+.alert-green { background: var(--green-light); border: 1px solid #9fd4b8; color: var(--green); }
+
+.divider { border: none; border-top: 1px solid var(--gray-100); margin: 16px 0; }
+
+@media (max-width: 768px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .sidebar { position: relative; height: auto; flex-direction: row; flex-wrap: wrap; }
+  .main { padding: 16px; }
+  .fg-3, .fg-4 { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="app-shell">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <h1>AgroPlano</h1>
+    <p>Correção &amp; Adubação</p>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-item active" id="nav1" onclick="showPanel(1)">
+      <span>01</span> Fazenda
+      <span class="nav-num" id="nn1">—</span>
+    </div>
+    <div class="nav-item" id="nav2" onclick="showPanel(2)">
+      <span>02</span> Áreas &amp; Orçamento
+      <span class="nav-num" id="nn2">—</span>
+    </div>
+    <div class="nav-item" id="nav3" onclick="showPanel(3)">
+      <span>03</span> Laudos &amp; Cotações
+      <span class="nav-num" id="nn3">—</span>
+    </div>
+    <div class="nav-item" id="nav4" onclick="showPanel(4)">
+      <span>04</span> Gerar Plano
+      <span class="nav-num" id="nn4">—</span>
+    </div>
+  </nav>
+  <div style="padding:16px 20px;border-top:1px solid rgba(255,255,255,0.08)">
+    <div style="font-size:10px;color:rgba(255,255,255,0.2);font-family:var(--mono);line-height:1.6">
+      1 UA = 450 kg PV<br>
+      Consumo = 2,43% PV/dia<br>
+      = 10,935 kg MS/dia/UA
+    </div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+<!-- PANEL 1: FAZENDA -->
+<div class="panel active" id="panel1">
+  <div class="page-header">
+    <h2>Identificação da fazenda</h2>
+    <p>Dados cadastrais e referência geográfica</p>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="ct-icon">🏡</span> Dados gerais</div>
+    <div class="fg fg-2">
+      <div class="field"><label>Nome da fazenda</label><input type="text" id="nomeFazenda" placeholder="Ex: Fazenda Santa Cruz"></div>
+      <div class="field"><label>Proprietário / responsável</label><input type="text" id="nomeProprietario" placeholder="Nome"></div>
+    </div>
+    <div class="fg fg-4">
+      <div class="field"><label>Município</label><input type="text" id="cidade" placeholder="Ex: Jataí"></div>
+      <div class="field"><label>Estado (UF)</label>
+        <select id="estado">
+          <option value="">Selecione</option>
+          <option>GO</option><option>MT</option><option>MS</option><option>MG</option>
+          <option>SP</option><option>PR</option><option>BA</option><option>TO</option>
+          <option>PA</option><option>RO</option><option>MA</option><option>PI</option><option>Outro</option>
+        </select>
+      </div>
+      <div class="field"><label>Área total da fazenda (ha)</label><input type="number" id="areaTotalFaz" placeholder="0"></div>
+      <div class="field"><label>Área de pastagem total (ha)</label><input type="number" id="areaPastagTotal" placeholder="0"></div>
+    </div>
+    <div class="fg fg-2">
+      <div class="field"><label>Coordenadas sede (lat, long)</label><input type="text" id="coordFaz" placeholder="-17.9302, -51.7153"></div>
+      <div class="field"><label>Arquivo KMZ / KML</label>
+        <div style="display:flex;gap:6px">
+          <input type="text" id="kmzNome" placeholder="Nenhum arquivo selecionado" readonly style="flex:1;cursor:pointer" onclick="document.getElementById('kmzInput').click()">
+          <button class="btn btn-sm" onclick="document.getElementById('kmzInput').click()">Selecionar</button>
+          <input type="file" id="kmzInput" accept=".kml,.kmz" style="display:none" onchange="document.getElementById('kmzNome').value=this.files[0]?.name||''">
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="ct-icon">🌧</span> Precipitação média mensal (mm) <span class="pill pill-amber" style="margin-left:6px">futura integração Climate Data</span></div>
+    <p style="font-size:12px;color:var(--gray-400);margin-bottom:14px">Informe a precipitação média mensal de referência para o município. Ano safra: Jul → Jun.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px" id="chuvaInputs"></div>
+  </div>
+  <div class="nav-btns">
+    <div></div>
+    <button class="btn btn-primary" onclick="showPanel(2)">Próximo — Áreas &amp; Orçamento →</button>
+  </div>
+</div>
+
+<!-- PANEL 2: ÁREAS & ORÇAMENTO -->
+<div class="panel" id="panel2">
+  <div class="page-header">
+    <h2>Áreas, configuração e orçamento forrageiro</h2>
+    <p>Configure cada área/piquete e insira a carga prevista mês a mês (ano safra: jul → jun)</p>
+  </div>
+
+  <div class="card" style="padding:14px 16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="card-title" style="margin:0"><span class="ct-icon">📋</span> Áreas / piquetes</div>
+      <button class="btn btn-sm btn-ghost" onclick="addArea()">+ Adicionar área</button>
+    </div>
+    <div class="grid-wrap">
+      <table class="areas-table">
+        <thead><tr id="gridHead"></tr></thead>
+        <tbody id="gridBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SEQUESTRO -->
+  <div class="card">
+    <div class="card-title"><span class="ct-icon">🥬</span> Sequestro — silagem / reserva estratégica</div>
+    <p style="font-size:12px;color:var(--gray-400);margin-bottom:14px">
+      Insira a MS total esperada das áreas de silagem. O sistema calcula quantas UA o estoque suporta por mês e distribui nos meses de sequestro selecionados.
+      <strong style="color:var(--gray-600)">Base: 1 UA = 450 kg PV × 2,43%PV/dia = 10,935 kg MS/dia.</strong>
+    </p>
+    <div class="fg fg-4">
+      <div class="field"><label>MS total estimada (t MS)</label><input type="number" id="seqMS" placeholder="0" oninput="calcSeq()"></div>
+      <div class="field"><label>Aproveitamento (%)</label><input type="number" id="seqAprov" value="85" placeholder="85" oninput="calcSeq()"></div>
+      <div class="field"><label>Consumo / UA (kg MS/dia)</label><input type="number" id="seqCons" value="10.935" step="0.001" oninput="calcSeq()"></div>
+      <div class="field"><label>Dias por mês</label><input type="number" id="seqDias" value="30" oninput="calcSeq()"></div>
+    </div>
+    <div class="field" style="margin-bottom:10px">
+      <label>Meses de sequestro (clique para selecionar)</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px" id="seqMesesWrap"></div>
+    </div>
+    <div id="seqResult" class="seq-result"></div>
+    <div id="seqDetail" style="font-size:11px;color:var(--amber);margin-top:4px;font-family:var(--mono)"></div>
+  </div>
+
+  <!-- BALANÇO -->
+  <div class="card">
+    <div class="card-title"><span class="ct-icon">⚖️</span> Balanço forrageiro — suporte vs carga (UA/mês)</div>
+    <div class="fg fg-3" style="margin-bottom:12px">
+      <div class="field"><label>Carga animal do sistema (UA totais)</label><input type="number" id="cargaUA" placeholder="Ex: 350" oninput="calcBalanco()"></div>
+      <div class="field"><label>Área de pastejo efetiva (ha)</label><input type="number" id="areaPastejoEfet" placeholder="auto" readonly style="background:var(--gray-50)"></div>
+      <div class="field"><label>UA/ha média do sistema</label><input type="number" id="uaHaMed" placeholder="auto" readonly style="background:var(--gray-50)"></div>
+    </div>
+    <div class="balanco-strip" id="balancoStrip"></div>
+    <div id="balancoAlert" style="margin-top:10px"></div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="btn" onclick="showPanel(1)">← Voltar</button>
+    <button class="btn btn-primary" onclick="showPanel(3)">Próximo — Laudos &amp; Cotações →</button>
+  </div>
+</div>
+
+<!-- PANEL 3: LAUDOS & COTAÇÕES -->
+<div class="panel" id="panel3">
+  <div class="page-header">
+    <h2>Laudos de solo &amp; cotação de insumos</h2>
+    <p>A IA extrai e interpreta os dados dos PDFs automaticamente</p>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="ct-icon">📄</span> Laudos de análise de solo (PDF)</div>
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+      <div class="upload-icon">📁</div>
+      <p>Clique ou arraste os PDFs aqui</p>
+      <div class="sub">Múltiplos arquivos aceitos — um laudo por área ou identificados por área</div>
+    </div>
+    <input type="file" id="fileInput" multiple accept=".pdf" style="display:none" onchange="handleFiles(this.files)">
+    <div class="file-list" id="fileList"></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="ct-icon">💰</span> Cotação de insumos <span class="pill pill-amber" style="margin-left:6px">opcional — usa referência se vazio</span></div>
+    <div class="cot-grid">
+      <div class="field"><label>Ureia (R$/t)</label><input type="number" id="pUreia" placeholder="referência"></div>
+      <div class="field"><label>KCl (R$/t)</label><input type="number" id="pKCl" placeholder="referência"></div>
+      <div class="field"><label>DAP (R$/t)</label><input type="number" id="pDAP" placeholder="referência"></div>
+      <div class="field"><label>MAP (R$/t)</label><input type="number" id="pMAP" placeholder="referência"></div>
+      <div class="field"><label>Superfosfato simples (R$/t)</label><input type="number" id="pSS" placeholder="referência"></div>
+      <div class="field"><label>Superfosfato triplo (R$/t)</label><input type="number" id="pST" placeholder="referência"></div>
+      <div class="field"><label>Fosfato nat. reativo (R$/t)</label><input type="number" id="pFosNat" placeholder="referência"></div>
+      <div class="field"><label>Calcário (R$/t)</label><input type="number" id="pCalcario" placeholder="referência"></div>
+      <div class="field"><label>Sulfato de amônio (R$/t)</label><input type="number" id="pSAmonio" placeholder="referência"></div>
+    </div>
+  </div>
+  <div class="nav-btns">
+    <button class="btn" onclick="showPanel(2)">← Voltar</button>
+    <button class="btn btn-primary" onclick="showPanel(4)">Próximo — Gerar plano →</button>
+  </div>
+</div>
+
+<!-- PANEL 4: GERAR PLANO -->
+<div class="panel" id="panel4">
+  <div class="page-header">
+    <h2>Revisão &amp; geração do plano agronômico</h2>
+    <p>Confira os dados e gere o plano completo de correção e adubação</p>
+  </div>
+  <div class="card" id="summaryCard">
+    <div class="card-title"><span class="ct-icon">✅</span> Resumo do projeto</div>
+    <div id="summaryContent"></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="ct-icon">💬</span> Observações adicionais</div>
+    <div class="field"><textarea id="obsAdicionais" placeholder="Histórico de manejo, restrições de insumos, metas específicas por área, preferências de cronograma, categoria animal predominante..."></textarea></div>
+  </div>
+  <div class="nav-btns" style="margin-bottom:16px">
+    <button class="btn" onclick="showPanel(3)">← Voltar</button>
+    <button class="btn btn-primary" onclick="gerarPlano()" id="btnGerar">🧠 Gerar plano agronômico</button>
+  </div>
+  <div id="resultCard" style="display:none">
+    <div class="card">
+      <div class="card-title"><span class="ct-icon">📋</span> Plano de correção e adubação</div>
+      <div id="outputArea" class="output-box"></div>
+      <div class="export-row">
+        <button class="btn btn-sm" onclick="exportTxt()">📄 Exportar .txt</button>
+        <button class="btn btn-sm" onclick="copiarPlano()" id="btnCopy">📋 Copiar</button>
+        <button class="btn btn-sm btn-ghost" onclick="alert('Cole as novas cotações no campo de observações e clique em Gerar Plano novamente para atualizar.')">🔄 Atualizar cotações</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /main -->
+</div><!-- /app-shell -->
+
+<script>
+const MESES = ['Jul','Ago','Set','Out','Nov','Dez','Jan','Fev','Mar','Abr','Mai','Jun'];
+const MESES_FULL = ['Julho','Agosto','Setembro','Outubro','Novembro','Dezembro','Janeiro','Fevereiro','Março','Abril','Maio','Junho'];
+const NIVEL_OPTS = ['Extensivo','Semi-intensivo','Intensivo'];
+const REGIME_OPTS = ['Sequeiro','Irrigado'];
+const USO_OPTS = ['Pastejo — águas','Diferimento','Silagem'];
+const INTERV_OPTS = ['Manutenção','Reforma'];
+
+let areas = [];
+let uploadedFiles = [];
+let planoTexto = '';
+let seqMesesSel = [];
+let areaCount = 0;
+
+// INIT CHUVA
+(function(){
+  const w = document.getElementById('chuvaInputs');
+  w.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:10px">' +
+    MESES.map((m,i)=>`<div style="text-align:center"><div style="font-size:10px;font-weight:600;color:var(--gray-400);font-family:var(--mono);letter-spacing:0.04em;margin-bottom:4px">${m}</div><input type="number" id="chuva_${i}" placeholder="—" style="width:58px;text-align:center;padding:6px 4px;border:1px solid var(--gray-200);border-radius:6px;font-family:var(--mono);font-size:12px;background:#fff"></div>`).join('') +
+  '</div>';
+})();
+
+// INIT SEQ MESES
+(function(){
+  const w = document.getElementById('seqMesesWrap');
+  MESES.forEach((m,i)=>{
+    const btn = document.createElement('button');
+    btn.className = 'seq-month-btn';
+    btn.textContent = m;
+    btn.dataset.idx = i;
+    btn.onclick = function(){
+      const idx = parseInt(this.dataset.idx);
+      if(seqMesesSel.includes(idx)){
+        seqMesesSel = seqMesesSel.filter(x=>x!==idx);
+        this.classList.remove('on');
+      } else {
+        seqMesesSel.push(idx);
+        this.classList.add('on');
+      }
+      calcSeq();
+      calcBalanco();
+    };
+    w.appendChild(btn);
+  });
+})();
+
+// PANELS
+function showPanel(n){
+  [1,2,3,4].forEach(i=>{
+    document.getElementById('panel'+i).classList.toggle('active',i===n);
+    document.getElementById('nav'+i).classList.toggle('active',i===n);
+  });
+  if(n===4) buildSummary();
+}
+
+// GRID HEADER
+function buildGridHead(){
+  const tr = document.getElementById('gridHead');
+  const cols = [
+    {l:'Identificação', fixed:true, w:120},
+    {l:'ha', w:60},{l:'Forrageira / cultivar', w:150},
+    {l:'Nível tec.', w:110},{l:'Regime', w:90},{l:'Uso', w:130},{l:'Intervenção', w:100},
+    ...MESES.map(m=>({l:m,month:true,w:58})),
+    {l:'Ações', w:70}
+  ];
+  tr.innerHTML = cols.map(c=>`<th class="${c.fixed?'th-fixed':''}${c.month?' th-month':''}" style="min-width:${c.w||80}px">${c.l}</th>`).join('');
+}
+
+function buildGridRows(){
+  const tbody = document.getElementById('gridBody');
+  tbody.innerHTML = '';
+  areas.forEach((a,idx)=>{
+    const tr = document.createElement('tr');
+    const isSil = a.uso === 'Silagem';
+    let html = `<td class="td-fixed"><input type="text" value="${a.id}" onchange="areas[${idx}].id=this.value"></td>`;
+    html += `<td><input type="number" value="${a.ha||''}" placeholder="0" step="0.1" style="width:54px;text-align:right" onchange="areas[${idx}].ha=parseFloat(this.value)||0;calcBalanco();updateAreaStats()"></td>`;
+    html += `<td><input type="text" value="${a.forrageira||''}" placeholder="Espécie / cultivar" style="min-width:140px" onchange="areas[${idx}].forrageira=this.value"></td>`;
+    html += `<td><select onchange="areas[${idx}].nivel=this.value">${NIVEL_OPTS.map(n=>`<option${a.nivel===n?' selected':''}>${n}</option>`).join('')}</select></td>`;
+    html += `<td><select onchange="areas[${idx}].regime=this.value">${REGIME_OPTS.map(n=>`<option${a.regime===n?' selected':''}>${n}</option>`).join('')}</select></td>`;
+    html += `<td><select onchange="areas[${idx}].uso=this.value;buildGridRows();calcBalanco()">${USO_OPTS.map(n=>`<option${a.uso===n?' selected':''}>${n}</option>`).join('')}</select></td>`;
+    html += `<td><select onchange="areas[${idx}].intervencao=this.value">${INTERV_OPTS.map(n=>`<option${a.intervencao===n?' selected':''}>${n}</option>`).join('')}</select></td>`;
+    MESES.forEach((m,mi)=>{
+      const v = a.meses[mi] !== undefined && a.meses[mi] !== 0 ? a.meses[mi] : '';
+      const ph = isSil ? 'kg' : 'UA/ha';
+      const color = isSil ? 'color:var(--amber);' : '';
+      html += `<td class="month-input"><input type="number" value="${v}" placeholder="${ph}" step="${isSil?10:0.1}" style="width:50px;text-align:center;${color}" onchange="areas[${idx}].meses[${mi}]=parseFloat(this.value)||0;calcBalanco()"></td>`;
+    });
+    html += `<td style="white-space:nowrap">
+      <button class="btn btn-sm btn-icon" title="Copiar esta área" onclick="copyArea(${idx})" style="margin-right:3px">⎘</button>
+      <button class="btn btn-sm btn-icon" title="Remover" onclick="removeArea(${idx})" style="color:var(--red)">✕</button>
+    </td>`;
+    tr.innerHTML = html;
+    tbody.appendChild(tr);
+  });
+  updateAreaStats();
+}
+
+function updateAreaStats(){
+  const pastejoHa = areas.filter(a=>a.uso!=='Silagem').reduce((s,a)=>s+(a.ha||0),0);
+  const carga = parseFloat(document.getElementById('cargaUA').value)||0;
+  document.getElementById('areaPastejoEfet').value = pastejoHa.toFixed(1);
+  document.getElementById('uaHaMed').value = pastejoHa>0&&carga>0 ? (carga/pastejoHa).toFixed(2) : '';
+}
+
+function addArea(){
+  areaCount++;
+  areas.push({id:'Pasto '+areaCount, ha:0, forrageira:'', nivel:'Semi-intensivo', regime:'Sequeiro', uso:'Pastejo — águas', intervencao:'Manutenção', meses:Array(12).fill(0)});
+  buildGridRows();
+  calcBalanco();
+}
+
+function copyArea(idx){
+  const src = areas[idx];
+  areaCount++;
+  areas.push({...src, id:src.id+' (cópia)', meses:[...src.meses]});
+  buildGridRows();
+  calcBalanco();
+}
+
+function removeArea(idx){
+  areas.splice(idx,1);
+  buildGridRows();
+  calcBalanco();
+}
+
+// SEQUESTRO
+function calcSeq(){
+  const ms = parseFloat(document.getElementById('seqMS').value)||0;
+  const aprov = (parseFloat(document.getElementById('seqAprov').value)||85)/100;
+  const cons = parseFloat(document.getElementById('seqCons').value)||10.935;
+  const dias = parseFloat(document.getElementById('seqDias').value)||30;
+  const msDisp = ms * aprov * 1000;
+  const n = seqMesesSel.length;
+  const uaMes = n>0 ? msDisp/cons/dias/n : 0;
+  const res = document.getElementById('seqResult');
+  const det = document.getElementById('seqDetail');
+  if(ms>0 && n>0){
+    res.textContent = `→ ${(msDisp/1000).toFixed(1)} t MS aproveitáveis | ${uaMes.toFixed(0)} UA/mês por ${n} mês(es)`;
+    det.textContent = `(${msDisp.toFixed(0)} kg MS ÷ ${cons} kg/UA/dia ÷ ${dias} dias ÷ ${n} meses)`;
+  } else if(ms>0){
+    res.textContent = `→ ${(msDisp/1000).toFixed(1)} t MS aproveitáveis — selecione os meses de sequestro`;
+    det.textContent = '';
+  } else {
+    res.textContent = ''; det.textContent = '';
+  }
+  calcBalanco();
+}
+
+function getSeqUAmes(){
+  const ms = parseFloat(document.getElementById('seqMS').value)||0;
+  const aprov = (parseFloat(document.getElementById('seqAprov').value)||85)/100;
+  const cons = parseFloat(document.getElementById('seqCons').value)||10.935;
+  const dias = parseFloat(document.getElementById('seqDias').value)||30;
+  const n = seqMesesSel.length||1;
+  return ms>0 ? (ms*aprov*1000)/cons/dias/n : 0;
+}
+
+// BALANÇO
+function calcBalanco(){
+  const carga = parseFloat(document.getElementById('cargaUA').value)||0;
+  const seqUA = getSeqUAmes();
+  const strip = document.getElementById('balancoStrip');
+  const alert = document.getElementById('balancoAlert');
+  let html = '';
+  let deficits = 0;
+  MESES.forEach((m,mi)=>{
+    let sup = 0;
+    areas.forEach(a=>{
+      if(a.uso!=='Silagem') sup += (a.ha||0)*(a.meses[mi]||0);
+    });
+    const seqN = seqMesesSel.includes(mi) ? seqUA : 0;
+    const total = sup + seqN;
+    const saldo = total - carga;
+    if(carga>0 && saldo<0) deficits++;
+    const cls = carga===0 ? 'bal-zero' : saldo>=0 ? 'bal-pos' : 'bal-neg';
+    const disp = carga===0 ? total.toFixed(0)+' UA' : (saldo>=0?'+':'')+saldo.toFixed(0)+' UA';
+    html += `<div class="bal-col"><div class="bal-mes">${m}</div><div class="bal-val ${cls}">${disp}</div></div>`;
+  });
+  strip.innerHTML = html;
+  if(carga>0){
+    alert.innerHTML = deficits===0
+      ? '<div class="alert alert-green">✓ Balanço positivo em todos os meses do ano safra</div>'
+      : `<div class="alert alert-red">⚠ ${deficits} mês(es) com déficit — revisar carga animal, diferimento ou volume de sequestro</div>`;
+  } else {
+    alert.innerHTML = '';
+  }
+  updateAreaStats();
+}
+
+// FILES
+const uz = document.getElementById('uploadZone');
+uz.addEventListener('dragover',e=>{e.preventDefault();uz.classList.add('drag')});
+uz.addEventListener('dragleave',()=>uz.classList.remove('drag'));
+uz.addEventListener('drop',e=>{e.preventDefault();uz.classList.remove('drag');handleFiles(e.dataTransfer.files)});
+
+function handleFiles(files){
+  Array.from(files).forEach(f=>{
+    if(!uploadedFiles.find(u=>u.name===f.name)){
+      uploadedFiles.push(f);
+      const item = document.createElement('div');
+      item.className = 'file-item';
+      item.id = 'fi_'+f.name.replace(/\W/g,'_');
+      item.innerHTML = `<span style="font-size:16px">📄</span><span class="fname">${f.name}</span><span class="fsize">${(f.size/1024).toFixed(0)} KB</span><span class="rm" onclick="removeFile('${f.name}')">✕</span>`;
+      document.getElementById('fileList').appendChild(item);
+    }
+  });
+}
+function removeFile(name){
+  uploadedFiles = uploadedFiles.filter(f=>f.name!==name);
+  const el = document.getElementById('fi_'+name.replace(/\W/g,'_'));
+  if(el) el.remove();
+}
+
+// SUMMARY
+function buildSummary(){
+  const totalHa = areas.reduce((s,a)=>s+(a.ha||0),0);
+  const pastejoHa = areas.filter(a=>a.uso!=='Silagem').reduce((s,a)=>s+(a.ha||0),0);
+  const silagemHa = areas.filter(a=>a.uso==='Silagem').reduce((s,a)=>s+(a.ha||0),0);
+  const diferencHa = areas.filter(a=>a.uso==='Diferimento').reduce((s,a)=>s+(a.ha||0),0);
+  let html = `
+    <div class="sum-row"><span class="sl">Fazenda</span><span class="sv">${document.getElementById('nomeFazenda').value||'—'}</span></div>
+    <div class="sum-row"><span class="sl">Município / UF</span><span class="sv">${document.getElementById('cidade').value||'—'} — ${document.getElementById('estado').value||'—'}</span></div>
+    <div class="sum-row"><span class="sl">Área total fazenda</span><span class="sv">${document.getElementById('areaTotalFaz').value||'—'} ha</span></div>
+    <div class="sum-row"><span class="sl">Áreas cadastradas</span><span class="sv">${areas.length} área(s) — ${totalHa.toFixed(1)} ha</span></div>
+    <div class="sum-row"><span class="sl">↳ Pastejo</span><span class="sv">${pastejoHa.toFixed(1)} ha</span></div>
+    <div class="sum-row"><span class="sl">↳ Diferimento</span><span class="sv">${diferencHa.toFixed(1)} ha</span></div>
+    <div class="sum-row"><span class="sl">↳ Silagem</span><span class="sv">${silagemHa.toFixed(1)} ha</span></div>
+    <div class="sum-row"><span class="sl">Carga animal</span><span class="sv">${document.getElementById('cargaUA').value||'—'} UA</span></div>
+    <div class="sum-row"><span class="sl">MS sequestro</span><span class="sv">${document.getElementById('seqMS').value||'—'} t MS</span></div>
+    <div class="sum-row"><span class="sl">Laudos enviados</span><span class="sv">${uploadedFiles.length} arquivo(s)</span></div>
+    <hr class="divider">
+  `;
+  areas.forEach(a=>{
+    html += `<div class="sum-row"><span class="sl" style="padding-left:10px">↳ ${a.id}</span><span class="sv">${a.ha||0} ha — ${a.forrageira||'forrageira não informada'} — <span class="pill pill-green" style="font-size:10px">${a.uso}</span> — ${a.intervencao}</span></div>`;
+  });
+  document.getElementById('summaryContent').innerHTML = html;
+}
+
+// GERAR PLANO
+async function gerarPlano(){
+  document.getElementById('resultCard').style.display = 'block';
+  document.getElementById('outputArea').innerHTML = '<div class="thinking"><div class="dots"><span></span><span></span><span></span></div><span>Analisando dados e gerando diagnóstico agronômico completo...</span></div>';
+
+  const totalHa = areas.reduce((s,a)=>s+(a.ha||0),0);
+  const carga = document.getElementById('cargaUA').value;
+  const obs = document.getElementById('obsAdicionais').value;
+  const msSeq = document.getElementById('seqMS').value;
+  const mesesSeqNomes = seqMesesSel.map(i=>MESES_FULL[i]).join(', ');
+
+  const cotStr = [
+    ['Ureia','pUreia'],['KCl','pKCl'],['DAP','pDAP'],['MAP','pMAP'],
+    ['SS','pSS'],['ST','pST'],['Fosfato Nat.','pFosNat'],['Calcário','pCalcario'],['S.Amônio','pSAmonio']
+  ].map(([n,id])=>{const v=document.getElementById(id).value;return v?`${n}: R$${v}/t`:null}).filter(Boolean).join(' | ')||'usar valores de referência da base de dados';
+
+  const areaStr = areas.map(a=>{
+    const mStr = MESES.map((m,i)=>a.meses[i]?`${m}:${a.meses[i]}${a.uso==='Silagem'?'kg':'UA/ha'}`:'').filter(Boolean).join(' ');
+    return `  • ${a.id}: ${a.ha}ha | ${a.forrageira||'forrageira não informada'} | ${a.nivel} | ${a.regime} | ${a.uso} | ${a.intervencao}${mStr?' | '+mStr:''}`;
+  }).join('\n');
+
+  const laudoTxt = uploadedFiles.length>0?`\nLaudos PDF: ${uploadedFiles.map(f=>f.name).join(', ')} — extraia e interprete os dados de cada laudo de forma integrada, cruzando com a área correspondente.`:'';
+  const seqTxt = msSeq?`\nSequestro: ${msSeq}t MS total, aproveitamento ${document.getElementById('seqAprov').value||85}%, meses selecionados: ${mesesSeqNomes||'não definidos'}. UA/mês calculada pelo sistema.`:'';
+
+  const prompt = `Você é um agrônomo especialista nível ESALQ/USP. Base científica obrigatória: Adilson Aguiar Alvarez V. (fertilidade, calibração), Sila Carneiro da Silva (fisiologia de pastagens, IAF, interceptação luminosa), Moacir Corsi (pastagens intensivas, rotacionado), José Alberto Gomide (forragicultura), Matruscello/FCAV-Unesp (sistemas intensivos), Cantarella & van Raij (Boletim 100/IAC), Novais/Alvarez/Barros (Fertilidade do Solo, SBCS/UFV).
+
+═══ DADOS DO PROJETO ═══
+Fazenda: ${document.getElementById('nomeFazenda').value||'—'} | ${document.getElementById('cidade').value||'—'}-${document.getElementById('estado').value||'—'}
+Área total: ${totalHa.toFixed(1)} ha | Carga: ${carga||'não informada'} UA
+Cotações: ${cotStr}
+${obs?'Obs. adicionais: '+obs:''}${laudoTxt}${seqTxt}
+
+═══ ÁREAS ═══
+${areaStr}
+
+═══ PLANO SOLICITADO ═══
+Para cada área, entregue:
+
+1. DIAGNÓSTICO INTEGRADO
+   - Interprete pH, V%, CTC efetiva e potencial, P-resina (ou Mehlich), K, Ca, Mg, S, micronutrientes (B, Zn, Cu, Mn)
+   - Calcule relações Ca:Mg, Ca:K, Mg:K e avalie saturações iônicas
+   - Saturação por Al — calcule % e indique impacto na absorção radicular
+   - MO: avalie estoque, impacto na CTC e capacidade tampão
+   - Liste fatores limitantes em ordem de prioridade (Lei do Mínimo aplicada ao sistema real)
+
+2. ESTIMATIVA DE PRODUÇÃO
+   - Pastejo/diferimento: produção de MS (kg MS/ha/ano), capacidade de suporte (UA/ha) por período, gap vs. potencial da espécie sob o nível tecnológico declarado
+   - Silagem: t MV/ha/corte esperada, t MS/ha, número de UA/mês que o estoque suportará
+
+3. RECOMENDAÇÃO DE CORREÇÃO
+   - Necessidade de calcário (método V%): V% atual, V% alvo por sistema, PRNT mínimo recomendado, dose (t/ha)
+   - Alternativa com óxidos de Ca/Mg (Filar, GeOu) quando aplicável: justifique com reatividade e custo-benefício
+   - Época e forma de aplicação
+
+4. RECOMENDAÇÃO DE ADUBAÇÃO
+   - Fontes disponíveis: DAP, MAP, KCl, Superfosfato Simples, Superfosfato Triplo, Fosfato Natural Reativo, Ureia, Sulfato de Amônio
+   - Para áreas irrigadas: detalhe fertirrigação (parcelamento, concentração máxima, compatibilidade de fontes)
+   - Para silagem: adubação de base (NPK + micronutrientes) e cobertura nitrogenada, exportação de nutrientes por t MV colhida
+   - Justifique cada fonte escolhida (eficiência agronômica vs. custo)
+
+5. TABELA CONSOLIDADA DE INSUMOS
+   | Insumo | Área/Pasto | ha | kg/ha | kg total (pasto) | Custo/ha (R$) | Custo total (R$) |
+   Ao final da tabela: linha de TOTAL GERAL por insumo (kg totais e R$ totais do projeto)
+
+6. META PÓS-INTERVENÇÃO
+   - Pastejo/diferimento: UA/ha esperada após resposta à correção e adubação (1°, 2° e 3° ano)
+   - Silagem: t MV/ha/corte esperada e qual o incremento relativo à estimativa atual
+
+7. CRONOGRAMA (ano safra jul–jun)
+   - Mês a mês, por área, indicando: operação, insumo, dose, forma de aplicação
+   - Use o cronograma padrão da base de dados como referência quando não houver instrução específica
+
+8. INCONSISTÊNCIAS & PERGUNTAS CRÍTICAS
+   - Aponte dados que parecem inconsistentes entre si ou com o perfil do sistema
+   - Liste o que está faltando para diagnóstico mais preciso, em ordem de prioridade
+
+Nível técnico máximo. Quantifique sempre. Use mecanismos fisiológicos e curvas de resposta quando relevante. Surpreenda com relações entre variáveis não óbvias. Trate o usuário como par técnico sênior de alto nível.`;
+
+  try {
+    const resp = await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:4000,messages:[{role:"user",content:prompt}]})
+    });
+    const data = await resp.json();
+    planoTexto = data.content?.map(b=>b.text||'').join('')||'Erro ao gerar o plano.';
+    document.getElementById('outputArea').textContent = planoTexto;
+  } catch(e){
+    document.getElementById('outputArea').textContent = 'Erro de conexão com a API. Verifique sua conexão e tente novamente.';
+  }
+}
+
+function exportTxt(){
+  const blob = new Blob([planoTexto],{type:'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (document.getElementById('nomeFazenda').value||'fazenda').replace(/\s/g,'_')+'_plano_agronomico.txt';
+  a.click();
+}
+
+function copiarPlano(){
+  navigator.clipboard.writeText(planoTexto).then(()=>{
+    const btn = document.getElementById('btnCopy');
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copiado!';
+    setTimeout(()=>btn.textContent=orig,2000);
+  });
+}
+
+// INIT
+buildGridHead();
+addArea();
+calcBalanco();
+</script>
+</body>
+</html>
