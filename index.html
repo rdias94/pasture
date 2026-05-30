@@ -485,68 +485,99 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-9
     <div class="car-sidebar">
       <div class="car-sidebar-body">
 
+        <!-- UF selector -->
         <div class="car-field">
-          <label>Número do CAR</label>
-          <input id="carNumero" placeholder="GO-5211404-67A1CB..." oninput="carNumeroInput(this.value)">
-        </div>
-        <div style="display:flex;gap:6px;margin-bottom:10px">
-          <button class="btn btn-sm btn-primary" onclick="buscarPorNumeroCAR()" style="flex:1">🔍 Buscar por CAR</button>
-          <button class="btn btn-sm" onclick="buscarPorLocalizacao()" title="Usar coordenadas do KML ou do mapa">📍 Localização</button>
+          <label>Estado (UF)</label>
+          <select id="carUF" onchange="carTrocarUF(this.value)">
+            <option value="GO" selected>GO — Goiás</option>
+            <option value="MT">MT — Mato Grosso</option>
+            <option value="MS">MS — Mato Grosso do Sul</option>
+            <option value="MG">MG — Minas Gerais</option>
+            <option value="SP">SP — São Paulo</option>
+            <option value="PR">PR — Paraná</option>
+            <option value="BA">BA — Bahia</option>
+            <option value="TO">TO — Tocantins</option>
+            <option value="PA">PA — Pará</option>
+            <option value="RO">RO — Rondônia</option>
+            <option value="MA">MA — Maranhão</option>
+            <option value="PI">PI — Piauí</option>
+            <option value="RS">RS — Rio Grande do Sul</option>
+            <option value="SC">SC — Santa Catarina</option>
+            <option value="RJ">RJ — Rio de Janeiro</option>
+            <option value="ES">ES — Espírito Santo</option>
+            <option value="PE">PE — Pernambuco</option>
+            <option value="CE">CE — Ceará</option>
+            <option value="AM">AM — Amazonas</option>
+            <option value="AC">AC — Acre</option>
+            <option value="RR">RR — Roraima</option>
+            <option value="AP">AP — Amapá</option>
+            <option value="DF">DF — Distrito Federal</option>
+          </select>
         </div>
 
-        <div id="carStatus" class="car-status">Informe o número do CAR ou use as coordenadas da fazenda.</div>
+        <div id="carStatus" class="car-status" style="margin-bottom:10px">
+          Navegue pelo mapa e clique em um imóvel para selecioná-lo.
+        </div>
 
-        <!-- Camadas -->
-        <div class="car-section-title">Camadas</div>
+        <!-- Camadas visíveis -->
+        <div class="car-section-title">Camadas visíveis no mapa</div>
         <div class="car-layer-toggle">
           <label class="car-layer-row">
-            <input type="checkbox" id="layerImovel" checked onchange="toggleCamada('imoveis')">
-            <span class="car-layer-dot" style="background:#FFD700;border:1px solid #ccc"></span>
-            Imóvel (perímetro)
+            <input type="checkbox" id="layerImovel" checked onchange="carToggleWMS()">
+            <span class="car-layer-dot" style="background:#FFD700;border:1px solid #aaa"></span>
+            Imóveis CAR (todos)
           </label>
           <label class="car-layer-row">
-            <input type="checkbox" id="layerAPP" onchange="toggleCamada('app')">
+            <input type="checkbox" id="layerAPP" onchange="carToggleCamada('app')">
             <span class="car-layer-dot" style="background:#27AE60"></span>
             APP
           </label>
           <label class="car-layer-row">
-            <input type="checkbox" id="layerRL" onchange="toggleCamada('reserva')">
+            <input type="checkbox" id="layerRL" onchange="carToggleCamada('reserva')">
             <span class="car-layer-dot" style="background:#1A5276"></span>
             Reserva Legal
           </label>
           <label class="car-layer-row">
-            <input type="checkbox" id="layerUso" onchange="toggleCamada('uso')">
+            <input type="checkbox" id="layerUso" onchange="carToggleCamada('uso')">
             <span class="car-layer-dot" style="background:#E67E22"></span>
             Uso Restrito
           </label>
         </div>
 
-        <!-- Resultados / Detalhe do imóvel -->
-        <div id="carResultados" style="margin-top:14px"></div>
+        <!-- Detalhe do imóvel selecionado -->
+        <div id="carDetalhe" style="display:none">
+          <div class="car-section-title" style="margin-top:14px">Imóvel selecionado</div>
+          <div class="car-imovel-detail" id="carDetalheContent"></div>
+          <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
+            <button class="btn btn-sm btn-primary" onclick="carImportarCamadas()" id="btnCarImportar">
+              ⬇ Carregar APP + Reserva + Uso Restrito
+            </button>
+            <button class="btn btn-sm" onclick="carImportarParaFazenda()" id="btnCarFazenda">
+              📋 Importar dados para aba Fazenda
+            </button>
+          </div>
+        </div>
 
       </div>
       <div class="car-sidebar-footer">
-        <div class="car-section-title" style="margin:0 0 6px">Exportar</div>
+        <div class="car-section-title" style="margin:0 0 6px">Exportar imóvel selecionado</div>
         <div class="car-export-row">
-          <button class="btn btn-sm" onclick="exportarCARKML()" id="btnExportCarKML" disabled>💾 KML</button>
-          <button class="btn btn-sm" onclick="exportarCARGeoJSON()" id="btnExportCarJSON" disabled>📄 GeoJSON</button>
-          <button class="btn btn-sm btn-primary" onclick="importarPerimetroParaFazenda()" id="btnImportPerim" disabled>📋 Importar perímetro</button>
+          <button class="btn btn-sm" onclick="carExportarKML()" id="btnExportCarKML" disabled>💾 KML</button>
+          <button class="btn btn-sm" onclick="carExportarGeoJSON()" id="btnExportCarJSON" disabled>📄 GeoJSON</button>
         </div>
+        <button class="btn btn-sm" onclick="carZoomFazenda()" style="margin-top:6px;width:100%">🎯 Ir para a fazenda</button>
       </div>
     </div>
 
-    <!-- Mapa CAR -->
+    <!-- Mapa -->
     <div class="car-map-wrap">
       <div id="mapaCAR"></div>
-      <!-- Legenda flutuante -->
       <div id="carLegenda" style="position:absolute;bottom:30px;left:10px;z-index:1000;background:rgba(255,255,255,0.95);padding:10px 12px;border-radius:8px;border:1px solid var(--gray-200);font-size:11px;display:none">
-        <div style="font-weight:600;margin-bottom:6px;color:var(--gray-600)">Legenda</div>
-        <div style="display:flex;flex-direction:column;gap:4px" id="carLegendaItems"></div>
+        <div style="font-weight:600;margin-bottom:6px;color:var(--gray-600)">Camadas ativas</div>
+        <div id="carLegendaItems"></div>
       </div>
-      <!-- Barra de status do mapa -->
-      <div style="position:absolute;top:10px;right:10px;z-index:1000;display:flex;gap:6px">
-        <button class="btn btn-sm" onclick="carZoomFazenda()" id="btnZoomFaz" title="Centralizar na fazenda">🎯</button>
-        <button class="btn btn-sm" onclick="limparCamadas()" title="Limpar camadas">🗑</button>
+      <div style="position:absolute;top:10px;right:50px;z-index:1000;background:rgba(255,255,255,0.9);padding:6px 10px;border-radius:6px;font-size:11px;color:var(--gray-600);pointer-events:none">
+        Clique em um imóvel para selecioná-lo
       </div>
     </div>
 
@@ -2112,58 +2143,50 @@ carregarApiKey();
 
 
 // ================================================================
-// PAINEL CAR — Consulta SICAR via Worker proxy
+// PAINEL CAR — navegação e click-to-select
 // ================================================================
 
-// URL do Worker — atualizar após deploy
 const WORKER_URL = 'https://pasture.rdias94.workers.dev';
 
-// Estado do painel CAR
 let carMapa = null;
 let carInited = false;
-let carCamadas = {}; // { imoveis: L.GeoJSON, app: L.GeoJSON, reserva: L.GeoJSON, uso: L.GeoJSON }
-let carGeojsonData = {}; // dados brutos por camada
-let carImovelAtual = null; // feature do imóvel selecionado
-let carWMSLayer = null; // camada WMS do SICAR como fundo
+let carUFAtual = 'GO';
+let carWMSLayer = null;         // tiles do SICAR via Worker
+let carCamadas = {};            // layers GeoJSON por tipo
+let carGeojsonData = {};        // dados brutos
+let carImovelSelecionado = null;// feature do imóvel clicado
+let carImovelLayer = null;      // layer highlight do imóvel selecionado
 
 const CAR_CORES = {
-  imoveis: { cor: '#FFD700', fill: '#FFD700', opacity: 0.1, weight: 2.5, label: 'Imóvel' },
-  app:     { cor: '#27AE60', fill: '#27AE60', opacity: 0.35, weight: 1.5, label: 'APP' },
-  reserva: { cor: '#1A5276', fill: '#1A5276', opacity: 0.35, weight: 1.5, label: 'Reserva Legal' },
-  uso:     { cor: '#E67E22', fill: '#E67E22', opacity: 0.3,  weight: 1.5, label: 'Uso Restrito' },
+  imovel:  { cor: '#FFD700', fill: '#FFD700', op: 0.15, w: 2.5, label: 'Imóvel' },
+  app:     { cor: '#27AE60', fill: '#27AE60', op: 0.40, w: 1.5, label: 'APP' },
+  reserva: { cor: '#1A5276', fill: '#1A5276', op: 0.40, w: 1.5, label: 'Reserva Legal' },
+  uso:     { cor: '#E67E22', fill: '#E67E22', op: 0.35, w: 1.5, label: 'Uso Restrito' },
 };
 
-// ── Inicializar painel (lazy) ────────────────────────────────────
+// ── Inicializar (lazy) ───────────────────────────────────────────
 function initPanelCAR() {
   if (carInited) return;
   carInited = true;
 
-  const div = document.getElementById('mapaCAR');
-  if (!div) return;
-
   carMapa = L.map('mapaCAR', { zoomControl: true, scrollWheelZoom: true });
 
-  // Satélite Esri como base
-  const sat = L.tileLayer(
+  // Base: satélite Esri
+  L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     { attribution: '© Esri', maxZoom: 20 }
-  );
-  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap', maxZoom: 19
-  });
-  sat.addTo(carMapa);
-  L.control.layers({ '🛰 Satélite': sat, '🗺 Mapa': osm }).addTo(carMapa);
+  ).addTo(carMapa);
 
-  // WMS do SICAR como camada de fundo (mostra todos os imóveis da região)
-  carWMSLayer = L.tileLayer.wms('https://geoserver.car.gov.br/geoserver/sicar/wms', {
-    layers: 'sicar:sicar_imoveis_go', // começa com GO, troca conforme UF detectada
-    format: 'image/png',
-    transparent: true,
-    opacity: 0.6,
-    attribution: '© SICAR/SFB',
-    styles: ''
-  });
-  // Não adiciona ainda — será adicionado quando souber a UF
+  // Detectar UF do estado já preenchido na aba Fazenda
+  const estadoEl = document.getElementById('estado');
+  if (estadoEl?.value) {
+    carUFAtual = estadoEl.value;
+    const sel = document.getElementById('carUF');
+    if (sel) sel.value = carUFAtual;
+  }
+
+  // Carregar tiles do SICAR via Worker
+  carCarregarWMS();
 
   // Centralizar na fazenda se tiver coordenadas
   const coordVal = document.getElementById('coordFaz')?.value;
@@ -2171,159 +2194,150 @@ function initPanelCAR() {
     const parts = coordVal.split(',').map(s => parseFloat(s.trim()));
     if (parts.length >= 2 && !isNaN(parts[0])) {
       carMapa.setView([parts[0], parts[1]], 14);
-      // Adicionar marcador da sede
-      L.marker([parts[0], parts[1]], {
-        icon: L.divIcon({
-          className: '',
-          html: '<div style="background:#1D9E75;width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.4)"></div>',
-          iconAnchor: [7, 7]
-        })
-      }).bindTooltip('Sede da fazenda', { permanent: false }).addTo(carMapa);
-
-      // Detectar UF e carregar WMS correspondente
-      const estadoEl = document.getElementById('estado');
-      const uf = estadoEl?.value || 'GO';
-      carAtualizarWMS(uf);
+      // Marcador da sede
+      L.circleMarker([parts[0], parts[1]], {
+        radius: 7, color: '#1D9E75', fillColor: '#1D9E75',
+        fillOpacity: 1, weight: 2,
+        className: ''
+      }).bindTooltip('Sede da fazenda').addTo(carMapa);
+    } else {
+      carMapa.setView([-15.77, -47.93], 5);
     }
   } else {
     carMapa.setView([-15.77, -47.93], 5);
   }
 
-  // Preencher número CAR se já digitado
-  const numEl = document.getElementById('carNumero');
-  if (numEl?.value) carNumeroInput(numEl.value);
+  // Clique no mapa → buscar imóvel nesse ponto
+  carMapa.on('click', carOnMapClick);
 }
 
-// ── Atualizar camada WMS por UF ──────────────────────────────────
-function carAtualizarWMS(uf) {
-  if (!carMapa || !carWMSLayer) return;
-  if (carMapa.hasLayer(carWMSLayer)) carMapa.removeLayer(carWMSLayer);
-  carWMSLayer.setParams({ layers: 'sicar:sicar_imoveis_' + uf.toLowerCase() }, false);
+// ── Carregar tiles WMS do SICAR via Worker ───────────────────────
+function carCarregarWMS() {
+  if (carWMSLayer) {
+    carMapa.removeLayer(carWMSLayer);
+    carWMSLayer = null;
+  }
+
+  if (!document.getElementById('layerImovel')?.checked) return;
+
+  // Tiles roteados pelo Worker: /tiles/{uf}/{z}/{y}/{x}
+  carWMSLayer = L.tileLayer(
+    WORKER_URL + '/tiles/' + carUFAtual.toLowerCase() + '/{z}/{y}/{x}',
+    {
+      opacity: 0.7,
+      maxZoom: 20,
+      attribution: '© SICAR/SFB'
+    }
+  );
   carWMSLayer.addTo(carMapa);
 }
 
-// ── Input do número CAR ──────────────────────────────────────────
-function carNumeroInput(val) {
-  val = val.trim();
-  if (val.length > 4) {
-    // Detectar UF do número (primeiros 2 chars)
-    const ufDetect = val.split('-')[0].toUpperCase();
-    if (ufDetect.length === 2) {
-      const sel = document.getElementById('estado');
-      if (sel) {
-        for (let i = 0; i < sel.options.length; i++) {
-          if (sel.options[i].value === ufDetect || sel.options[i].text === ufDetect) {
-            sel.selectedIndex = i;
-            break;
-          }
-        }
-      }
-      if (carMapa) carAtualizarWMS(ufDetect);
-    }
-  }
+// ── Trocar UF ────────────────────────────────────────────────────
+function carTrocarUF(uf) {
+  carUFAtual = uf;
+  carLimparCamadas();
+  carCarregarWMS();
+  carSetStatus('Mapa atualizado para ' + uf + '. Clique em um imóvel.');
 }
 
-// ── Buscar por número do CAR ─────────────────────────────────────
-async function buscarPorNumeroCAR() {
-  const numero = document.getElementById('carNumero').value.trim();
-  if (!numero) { carSetStatus('⚠ Informe o número do CAR', 'amber'); return; }
+// ── Toggle da camada WMS ─────────────────────────────────────────
+function carToggleWMS() {
+  carCarregarWMS();
+}
 
-  const uf = numero.split('-')[0].toUpperCase() || document.getElementById('estado')?.value || 'GO';
-  carSetStatus('⏳ Consultando SICAR...', 'gray');
+// ── Clique no mapa → buscar imóvel ──────────────────────────────
+async function carOnMapClick(e) {
+  const lat = e.latlng.lat;
+  const lon = e.latlng.lng;
+
+  carSetStatus('⏳ Buscando imóvel...', 'gray');
 
   try {
-    const url = WORKER_URL + '/car?numero=' + encodeURIComponent(numero) + '&uf=' + uf;
+    const url = WORKER_URL + '/click?lat=' + lat + '&lon=' + lon + '&uf=' + carUFAtual;
     const resp = await fetch(url);
     if (!resp.ok) throw new Error('Worker HTTP ' + resp.status);
     const geojson = await resp.json();
 
     if (!geojson.features || geojson.features.length === 0) {
-      carSetStatus('✗ Imóvel não encontrado. Verifique o número do CAR.', 'red');
+      carSetStatus('Nenhum imóvel CAR nesse ponto. Tente outro local.', 'amber');
       return;
     }
 
-    carGeojsonData.imoveis = geojson;
-    renderizarCamada('imoveis', geojson);
-    mostrarDetalheImovel(geojson.features[0]);
-    carSetStatus('✓ ' + geojson.features.length + ' imóvel(is) encontrado(s)', 'green');
-
-    // Habilitar botões de exportar
-    document.getElementById('btnExportCarKML').disabled = false;
-    document.getElementById('btnExportCarJSON').disabled = false;
-    document.getElementById('btnImportPerim').disabled = false;
-
-    // Buscar demais camadas automaticamente
+    // Pegar o primeiro (mais próximo ao clique)
     const feature = geojson.features[0];
-    const bbox = getBBOX(feature);
-    carBuscarCamadasAdicionais(bbox, uf, numero);
+    carSelecionarImovel(feature);
 
-  } catch (e) {
-    carSetStatus('✗ Erro: ' + e.message + ' — verifique se o Worker está deployado', 'red');
+  } catch(e) {
+    carSetStatus('✗ Erro: ' + e.message, 'red');
     console.error(e);
   }
 }
 
-// ── Buscar por localização (coordenadas do KML/fazenda) ──────────
-async function buscarPorLocalizacao() {
-  const coordVal = document.getElementById('coordFaz')?.value;
-  if (!coordVal) {
-    carSetStatus('⚠ Importe um KML ou insira coordenadas na aba Fazenda primeiro', 'amber');
-    return;
-  }
-  const parts = coordVal.split(',').map(s => parseFloat(s.trim()));
-  if (parts.length < 2 || isNaN(parts[0])) {
-    carSetStatus('⚠ Coordenadas inválidas na aba Fazenda', 'amber');
-    return;
-  }
+// ── Selecionar e destacar imóvel ─────────────────────────────────
+function carSelecionarImovel(feature) {
+  carImovelSelecionado = feature;
 
-  const lat = parts[0], lon = parts[1];
-  const delta = 0.015; // ~1.5 km de raio
-  const bbox = (lon - delta) + ',' + (lat - delta) + ',' + (lon + delta) + ',' + (lat + delta);
-  const uf = document.getElementById('estado')?.value || 'GO';
+  // Remover highlight anterior
+  if (carImovelLayer) { carMapa.removeLayer(carImovelLayer); carImovelLayer = null; }
 
-  carMapa.setView([lat, lon], 14);
-  carAtualizarWMS(uf);
-  carSetStatus('⏳ Buscando imóveis na localização...', 'gray');
-
-  try {
-    const url = WORKER_URL + '/car?bbox=' + encodeURIComponent(bbox) + '&uf=' + uf + '&limit=10';
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error('Worker HTTP ' + resp.status);
-    const geojson = await resp.json();
-
-    if (!geojson.features || geojson.features.length === 0) {
-      carSetStatus('✗ Nenhum imóvel encontrado nessa localização', 'red');
-      return;
+  // Destacar o imóvel selecionado
+  carImovelLayer = L.geoJSON(feature, {
+    style: {
+      color: '#FFD700', fillColor: '#FFD700',
+      fillOpacity: 0.15, weight: 3
     }
+  }).addTo(carMapa);
 
-    carGeojsonData.imoveis = geojson;
-    renderizarCamada('imoveis', geojson);
-    mostrarListaImoveis(geojson.features);
-    carSetStatus('✓ ' + geojson.features.length + ' imóvel(is) na área', 'green');
+  // Zoom para o imóvel
+  try { carMapa.fitBounds(carImovelLayer.getBounds(), { padding: [30, 30] }); } catch(e) {}
 
-    document.getElementById('btnExportCarKML').disabled = false;
-    document.getElementById('btnExportCarJSON').disabled = false;
+  // Mostrar detalhe no sidebar
+  const p = feature.properties || {};
+  const cod = p.COD_IMOVEL || p.cod_imovel || '—';
+  const area = p.NUM_AREA ? parseFloat(p.NUM_AREA).toFixed(2) + ' ha' : '—';
+  const mun = p.NOM_MUNICI || p.municipio || '—';
+  const sit = p.SIT_CAR || '—';
 
-  } catch (e) {
-    carSetStatus('✗ Erro: ' + e.message + ' — verifique se o Worker está deployado', 'red');
-    console.error(e);
-  }
+  document.getElementById('carDetalheContent').innerHTML =
+    '<div class="cid-row"><span class="cid-k">Município</span><span class="cid-v">' + mun + '</span></div>' +
+    '<div class="cid-row"><span class="cid-k">Área total</span><span class="cid-v">' + area + '</span></div>' +
+    '<div class="cid-row"><span class="cid-k">Situação</span><span class="cid-v">' + sit + '</span></div>' +
+    '<div class="cid-row"><span class="cid-k">CAR</span><span class="cid-v" style="word-break:break-all;font-size:10px">' + cod + '</span></div>';
+
+  document.getElementById('carDetalhe').style.display = 'block';
+  document.getElementById('btnExportCarKML').disabled = false;
+  document.getElementById('btnExportCarJSON').disabled = false;
+
+  carGeojsonData.imovel = { type: 'FeatureCollection', features: [feature] };
+  carSetStatus('✓ Imóvel selecionado — ' + mun + ' · ' + area, 'green');
 }
 
-// ── Buscar APP, Reserva e Uso Restrito em paralelo ───────────────
-async function carBuscarCamadasAdicionais(bbox, uf, numero) {
-  const tipos = ['app', 'reserva', 'uso'];
+// ── Carregar APP + Reserva + Uso Restrito do imóvel ─────────────
+async function carImportarCamadas() {
+  if (!carImovelSelecionado) return;
+  const p = carImovelSelecionado.properties || {};
+  const cod = p.COD_IMOVEL || p.cod_imovel || '';
+  const uf = cod.split('-')[0]?.toLowerCase() || carUFAtual.toLowerCase();
+
+  // BBOX do imóvel
+  let bbox = '';
+  try {
+    const b = carImovelLayer.getBounds();
+    bbox = b.getWest() + ',' + b.getSouth() + ',' + b.getEast() + ',' + b.getNorth();
+  } catch(e) {}
+
+  const tipos = ['app','reserva','uso'];
+  const checkMap = { app:'layerAPP', reserva:'layerRL', uso:'layerUso' };
+
+  carSetStatus('⏳ Carregando camadas ambientais...', 'gray');
 
   await Promise.allSettled(tipos.map(async (tipo) => {
-    const chk = document.getElementById(
-      tipo === 'app' ? 'layerAPP' : tipo === 'reserva' ? 'layerRL' : 'layerUso'
-    );
-    if (!chk?.checked) return;
+    const chk = document.getElementById(checkMap[tipo]);
+    if (!chk) return;
+    chk.checked = true;
 
-    const param = numero
-      ? 'numero=' + encodeURIComponent(numero)
-      : 'bbox=' + encodeURIComponent(bbox);
-    const url = WORKER_URL + '/car/' + tipo + '?' + param + '&uf=' + uf;
+    const param = cod ? 'numero=' + encodeURIComponent(cod) : 'bbox=' + encodeURIComponent(bbox);
+    const url = WORKER_URL + '/camadas?' + param + '&uf=' + uf + '&tipo=' + tipo;
 
     try {
       const resp = await fetch(url);
@@ -2331,312 +2345,179 @@ async function carBuscarCamadasAdicionais(bbox, uf, numero) {
       const geojson = await resp.json();
       if (geojson.features?.length > 0) {
         carGeojsonData[tipo] = geojson;
-        renderizarCamada(tipo, geojson);
+        carRenderizarCamada(tipo, geojson);
       }
-    } catch (e) {
-      console.warn('Camada ' + tipo + ' falhou:', e.message);
+    } catch(e) {
+      console.warn('Camada ' + tipo + ':', e.message);
     }
   }));
 
-  atualizarLegenda();
+  carAtualizarLegenda();
+  carSetStatus('✓ Camadas carregadas', 'green');
 }
 
-// ── Renderizar uma camada GeoJSON no mapa ────────────────────────
-function renderizarCamada(tipo, geojson) {
-  // Remover camada anterior do mesmo tipo
-  if (carCamadas[tipo]) {
-    carMapa.removeLayer(carCamadas[tipo]);
-    delete carCamadas[tipo];
-  }
-
-  const cfg = CAR_CORES[tipo];
-  if (!cfg || !geojson.features?.length) return;
+// ── Renderizar camada GeoJSON ────────────────────────────────────
+function carRenderizarCamada(tipo, geojson) {
+  if (carCamadas[tipo]) { carMapa.removeLayer(carCamadas[tipo]); delete carCamadas[tipo]; }
+  const cfg = CAR_CORES[tipo] || CAR_CORES.imovel;
+  if (!geojson.features?.length) return;
 
   const layer = L.geoJSON(geojson, {
-    style: {
-      color: cfg.cor,
-      fillColor: cfg.fill,
-      fillOpacity: cfg.opacity,
-      weight: cfg.weight
-    },
-    onEachFeature: (feature, layer) => {
-      const p = feature.properties || {};
-      const area = p.NUM_AREA ? parseFloat(p.NUM_AREA).toFixed(1) + ' ha' : '—';
-      const cod = p.COD_IMOVEL || p.cod_imovel || '';
-      const mun = p.NOM_MUNICI || p.municipio || '';
-      layer.bindTooltip(
-        '<strong>' + cfg.label + '</strong>' +
-        (mun ? '<br>' + mun : '') +
-        (area !== '—' ? '<br>' + area : '') +
-        (cod ? '<br><span style="font-size:10px;color:#aaa">' + cod.substring(0, 30) + '...</span>' : ''),
-        { sticky: true, opacity: 0.95 }
-      );
-      if (tipo === 'imoveis') {
-        layer.on('click', () => {
-          mostrarDetalheImovel(feature);
-          carImovelAtual = feature;
-          document.getElementById('btnImportPerim').disabled = false;
-        });
-      }
+    style: { color: cfg.cor, fillColor: cfg.fill, fillOpacity: cfg.op, weight: cfg.w },
+    onEachFeature: (f, l) => {
+      const area = f.properties?.NUM_AREA ? parseFloat(f.properties.NUM_AREA).toFixed(1) + ' ha' : '';
+      l.bindTooltip('<strong>' + cfg.label + '</strong>' + (area ? '<br>' + area : ''), { sticky: true });
     }
-  });
+  }).addTo(carMapa);
 
-  layer.addTo(carMapa);
   carCamadas[tipo] = layer;
-
-  // Zoom para o imóvel se for o principal
-  if (tipo === 'imoveis') {
-    try { carMapa.fitBounds(layer.getBounds(), { padding: [30, 30] }); } catch (e) {}
-  }
-
-  atualizarLegenda();
+  carAtualizarLegenda();
 }
 
-// ── Toggle de camada pelo checkbox ───────────────────────────────
-function toggleCamada(tipo) {
+// ── Toggle de camadas carregadas ─────────────────────────────────
+function carToggleCamada(tipo) {
   if (!carCamadas[tipo]) {
-    // Camada não carregada ainda — buscar se tiver imóvel
-    const numEl = document.getElementById('carNumero');
-    const num = numEl?.value?.trim();
-    if (num) buscarPorNumeroCAR();
+    // Não carregada ainda — buscar se tiver imóvel
+    if (carImovelSelecionado) carImportarCamadas();
     return;
   }
-  const chkMap = { imoveis: 'layerImovel', app: 'layerAPP', reserva: 'layerRL', uso: 'layerUso' };
+  const chkMap = { app:'layerAPP', reserva:'layerRL', uso:'layerUso' };
   const chk = document.getElementById(chkMap[tipo]);
   if (!chk) return;
-
-  if (chk.checked) {
-    carCamadas[tipo].addTo(carMapa);
-  } else {
-    carMapa.removeLayer(carCamadas[tipo]);
-  }
-  atualizarLegenda();
+  if (chk.checked) carCamadas[tipo].addTo(carMapa);
+  else carMapa.removeLayer(carCamadas[tipo]);
+  carAtualizarLegenda();
 }
 
-// ── Mostrar detalhes de um imóvel ────────────────────────────────
-function mostrarDetalheImovel(feature) {
-  carImovelAtual = feature;
-  const p = feature.properties || {};
-  const cod = p.COD_IMOVEL || p.cod_imovel || '—';
-  const area = p.NUM_AREA ? parseFloat(p.NUM_AREA).toFixed(2) + ' ha' : '—';
-  const mun = p.NOM_MUNICI || p.municipio || '—';
-  const sit = p.SIT_CAR || p.situacao || '—';
-  const tipo = p.TIP_IMOVEL || p.tipo_imovel || '—';
-
-  // Preencher número do CAR automaticamente
-  const numEl = document.getElementById('carNumero');
-  if (numEl && cod !== '—') numEl.value = cod;
-
-  const div = document.getElementById('carResultados');
-  div.innerHTML = `
-    <div class="car-section-title">Imóvel selecionado</div>
-    <div class="car-imovel-detail">
-      <div class="cid-row"><span class="cid-k">Município</span><span class="cid-v">${mun}</span></div>
-      <div class="cid-row"><span class="cid-k">Área total</span><span class="cid-v">${area}</span></div>
-      <div class="cid-row"><span class="cid-k">Situação</span><span class="cid-v">${sit}</span></div>
-      <div class="cid-row"><span class="cid-k">Tipo</span><span class="cid-v">${tipo}</span></div>
-      <div class="cid-row"><span class="cid-k">CAR</span><span class="cid-v" style="word-break:break-all;font-size:10px">${cod}</span></div>
-    </div>
-    ${Object.keys(carGeojsonData).filter(t=>t!=='imoveis').map(t => {
-      const d = carGeojsonData[t];
-      const ha = d.features?.reduce((s, f) => s + (parseFloat(f.properties?.NUM_AREA || f.properties?.area || 0)), 0) || 0;
-      const cfg = CAR_CORES[t];
-      return '<span class="car-camada-pill" style="background:' + cfg.fill + '22;border:1px solid ' + cfg.cor + ';color:' + cfg.cor + '">' + cfg.label + ': ' + ha.toFixed(1) + ' ha</span>';
-    }).join(' ')}
-  `;
-}
-
-// ── Mostrar lista de imóveis (busca por bbox) ────────────────────
-function mostrarListaImoveis(features) {
-  const div = document.getElementById('carResultados');
-  div.innerHTML = '<div class="car-section-title">Imóveis encontrados — clique para selecionar</div>' +
-    features.map((f, i) => {
-      const p = f.properties || {};
-      const cod = p.COD_IMOVEL || p.cod_imovel || 'Imóvel ' + (i + 1);
-      const area = p.NUM_AREA ? parseFloat(p.NUM_AREA).toFixed(1) + ' ha' : '—';
-      const mun = p.NOM_MUNICI || '';
-      return '<div class="car-result-item" onclick="selecionarImovelLista(' + i + ')">' +
-        '<div class="car-ri-cod">' + cod + '</div>' +
-        '<div class="car-ri-nome">' + mun + '</div>' +
-        '<div class="car-ri-area">' + area + '</div>' +
-        '</div>';
-    }).join('');
-}
-
-function selecionarImovelLista(idx) {
-  if (!carGeojsonData.imoveis?.features?.[idx]) return;
-  const feature = carGeojsonData.imoveis.features[idx];
-  mostrarDetalheImovel(feature);
-  document.getElementById('btnImportPerim').disabled = false;
-  document.getElementById('btnExportCarKML').disabled = false;
-  document.getElementById('btnExportCarJSON').disabled = false;
-
-  // Zoom para o imóvel
-  try {
-    const layer = L.geoJSON(feature);
-    carMapa.fitBounds(layer.getBounds(), { padding: [40, 40] });
-  } catch (e) {}
-
-  // Buscar demais camadas para o imóvel
-  const p = feature.properties || {};
-  const cod = p.COD_IMOVEL || '';
-  const uf = cod.split('-')[0] || document.getElementById('estado')?.value || 'GO';
-  const bbox = getBBOX(feature);
-  carBuscarCamadasAdicionais(bbox, uf, cod);
-}
-
-// ── Legenda dinâmica ─────────────────────────────────────────────
-function atualizarLegenda() {
+// ── Legenda ──────────────────────────────────────────────────────
+function carAtualizarLegenda() {
   const div = document.getElementById('carLegendaItems');
-  const legDiv = document.getElementById('carLegenda');
+  const leg = document.getElementById('carLegenda');
   const ativos = Object.keys(carCamadas);
-
-  if (ativos.length === 0) { legDiv.style.display = 'none'; return; }
-  legDiv.style.display = 'block';
-
-  div.innerHTML = ativos.map(tipo => {
-    const cfg = CAR_CORES[tipo];
-    return '<div style="display:flex;align-items:center;gap:6px">' +
+  if (carImovelLayer) ativos.unshift('imovel');
+  if (ativos.length === 0) { leg.style.display = 'none'; return; }
+  leg.style.display = 'block';
+  div.innerHTML = ativos.map(t => {
+    const cfg = CAR_CORES[t] || CAR_CORES.imovel;
+    return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">' +
       '<span style="width:12px;height:12px;border-radius:2px;background:' + cfg.fill + ';border:1px solid ' + cfg.cor + ';flex-shrink:0"></span>' +
-      '<span>' + cfg.label + '</span>' +
-      '</div>';
+      cfg.label + '</div>';
   }).join('');
 }
 
-// ── Helpers ──────────────────────────────────────────────────────
-function getBBOX(feature) {
-  try {
-    const layer = L.geoJSON(feature);
-    const b = layer.getBounds();
-    return b.getWest() + ',' + b.getSouth() + ',' + b.getEast() + ',' + b.getNorth();
-  } catch (e) {
-    return '';
-  }
-}
-
-function carSetStatus(msg, tipo) {
-  const el = document.getElementById('carStatus');
-  if (!el) return;
-  const cores = { gray: 'var(--gray-400)', green: 'var(--green)', red: 'var(--red)', amber: 'var(--amber)' };
-  el.textContent = msg;
-  el.style.color = cores[tipo] || cores.gray;
-}
-
-function carZoomFazenda() {
-  const coordVal = document.getElementById('coordFaz')?.value;
-  if (!coordVal || !carMapa) return;
-  const parts = coordVal.split(',').map(s => parseFloat(s.trim()));
-  if (parts.length >= 2 && !isNaN(parts[0])) carMapa.setView([parts[0], parts[1]], 14);
-}
-
-function limparCamadas() {
-  Object.values(carCamadas).forEach(l => { if (carMapa.hasLayer(l)) carMapa.removeLayer(l); });
-  carCamadas = {};
-  carGeojsonData = {};
-  carImovelAtual = null;
-  document.getElementById('carResultados').innerHTML = '';
-  document.getElementById('btnExportCarKML').disabled = true;
-  document.getElementById('btnExportCarJSON').disabled = true;
-  document.getElementById('btnImportPerim').disabled = true;
-  atualizarLegenda();
-  carSetStatus('Camadas limpas. Faça uma nova busca.', 'gray');
-}
-
-// ── Exportar KML ─────────────────────────────────────────────────
-function exportarCARKML() {
-  const geojson = { type: 'FeatureCollection', features: [] };
-  Object.entries(carGeojsonData).forEach(([tipo, gj]) => {
-    if (gj.features) {
-      gj.features.forEach(f => geojson.features.push({ ...f, properties: { ...f.properties, _tipo: tipo } }));
-    }
-  });
-
-  if (geojson.features.length === 0) { alert('Nenhuma camada para exportar'); return; }
-
-  function geomKML(geom) {
-    if (!geom) return '';
-    if (geom.type === 'Polygon') {
-      const pts = geom.coordinates[0].map(c => c[0] + ',' + c[1] + ',0').join(' ');
-      return '<Polygon><outerBoundaryIs><LinearRing><coordinates>' + pts + '</coordinates></LinearRing></outerBoundaryIs></Polygon>';
-    }
-    if (geom.type === 'MultiPolygon') {
-      return geom.coordinates.map(poly => {
-        const pts = poly[0].map(c => c[0] + ',' + c[1] + ',0').join(' ');
-        return '<Polygon><outerBoundaryIs><LinearRing><coordinates>' + pts + '</coordinates></LinearRing></outerBoundaryIs></Polygon>';
-      }).join('');
-    }
-    return '';
-  }
-
-  let placemarks = '';
-  geojson.features.forEach(f => {
-    const p = f.properties || {};
-    const nome = p.COD_IMOVEL || p._tipo || 'Feature';
-    placemarks += '<Placemark><name>' + nome + '</name><description>' + (p._tipo || '') + '</description>' + geomKML(f.geometry) + '</Placemark>';
-  });
-
-  const kml = '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>CAR Export</name>' + placemarks + '</Document></kml>';
-  const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'car_export.kml';
-  a.click();
-}
-
-// ── Exportar GeoJSON ─────────────────────────────────────────────
-function exportarCARGeoJSON() {
-  const combined = { type: 'FeatureCollection', features: [] };
-  Object.entries(carGeojsonData).forEach(([tipo, gj]) => {
-    if (gj.features) {
-      gj.features.forEach(f => combined.features.push({ ...f, properties: { ...f.properties, _tipo: tipo } }));
-    }
-  });
-  const blob = new Blob([JSON.stringify(combined, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'car_export.geojson';
-  a.click();
-}
-
-// ── Importar perímetro para a aba Fazenda ────────────────────────
-function importarPerimetroParaFazenda() {
-  if (!carImovelAtual) { alert('Selecione um imóvel primeiro'); return; }
-  const p = carImovelAtual.properties || {};
-
-  // Preencher município e estado se disponível
+// ── Importar para aba Fazenda ────────────────────────────────────
+function carImportarParaFazenda() {
+  if (!carImovelSelecionado) return;
+  const p = carImovelSelecionado.properties || {};
   const mun = p.NOM_MUNICI || p.municipio || '';
   const cod = p.COD_IMOVEL || '';
   const uf = cod.split('-')[0] || '';
 
   if (mun) {
-    const cidadeEl = document.getElementById('cidade');
-    if (cidadeEl && !cidadeEl.value) cidadeEl.value = mun;
+    const el = document.getElementById('cidade');
+    if (el && !el.value) el.value = mun;
   }
   if (uf) {
     const sel = document.getElementById('estado');
     if (sel) {
       for (let i = 0; i < sel.options.length; i++) {
-        if (sel.options[i].value === uf || sel.options[i].text === uf) { sel.selectedIndex = i; break; }
+        if (sel.options[i].value === uf) { sel.selectedIndex = i; break; }
       }
     }
   }
+  // Coordenadas do centróide
+  try {
+    const b = carImovelLayer.getBounds();
+    const lat = ((b.getNorth() + b.getSouth()) / 2).toFixed(5);
+    const lon = ((b.getEast() + b.getWest()) / 2).toFixed(5);
+    const coordEl = document.getElementById('coordFaz');
+    if (coordEl && !coordEl.value) coordEl.value = lat + ', ' + lon;
+  } catch(e) {}
 
-  // Preencher número do CAR
-  const numEl = document.getElementById('carNumero');
-  if (numEl?.value) {
-    const inputNomeFaz = document.getElementById('nomeFazenda');
-    // não sobrescrever nome, só completar dados
+  showPanel(1);
+  carNotif('✓ Dados importados para a aba Fazenda');
+}
+
+// ── Ir para a fazenda ────────────────────────────────────────────
+function carZoomFazenda() {
+  const coordVal = document.getElementById('coordFaz')?.value;
+  if (!coordVal || !carMapa) return;
+  const parts = coordVal.split(',').map(s => parseFloat(s.trim()));
+  if (parts.length >= 2 && !isNaN(parts[0])) {
+    carMapa.setView([parts[0], parts[1]], 14);
+  }
+}
+
+// ── Limpar tudo ──────────────────────────────────────────────────
+function carLimparCamadas() {
+  Object.values(carCamadas).forEach(l => { if (carMapa?.hasLayer(l)) carMapa.removeLayer(l); });
+  carCamadas = {};
+  carGeojsonData = {};
+  if (carImovelLayer) { carMapa.removeLayer(carImovelLayer); carImovelLayer = null; }
+  carImovelSelecionado = null;
+  document.getElementById('carDetalhe').style.display = 'none';
+  document.getElementById('btnExportCarKML').disabled = true;
+  document.getElementById('btnExportCarJSON').disabled = true;
+  carAtualizarLegenda();
+}
+
+// ── Exportar KML ─────────────────────────────────────────────────
+function carExportarKML() {
+  const features = Object.values(carGeojsonData).flatMap(gj => gj.features || []);
+  if (features.length === 0) return;
+
+  function geomKML(geom) {
+    if (!geom) return '';
+    const aneis = geom.type === 'Polygon' ? [geom.coordinates] : geom.coordinates || [];
+    return aneis.map(rings =>
+      '<Polygon><outerBoundaryIs><LinearRing><coordinates>' +
+      rings[0].map(c => c[0] + ',' + c[1] + ',0').join(' ') +
+      '</coordinates></LinearRing></outerBoundaryIs></Polygon>'
+    ).join('');
   }
 
-  // Navegar para aba fazenda
-  showPanel(1);
+  let marks = '';
+  features.forEach(f => {
+    const nome = f.properties?.COD_IMOVEL || f.properties?._tipo || 'Feature';
+    marks += '<Placemark><name>' + nome + '</name>' + geomKML(f.geometry) + '</Placemark>';
+  });
+  const kml = '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>' + marks + '</Document></kml>';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' }));
+  a.download = 'car_imovel.kml';
+  a.click();
+}
 
-  // Notificar usuário
-  const banner = document.createElement('div');
-  banner.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1A7A52;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.2)';
-  banner.textContent = '✓ Dados do CAR importados para a aba Fazenda';
-  document.body.appendChild(banner);
-  setTimeout(() => banner.remove(), 3500);
+// ── Exportar GeoJSON ─────────────────────────────────────────────
+function carExportarGeoJSON() {
+  const features = Object.values(carGeojsonData).flatMap(gj => gj.features || []);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({ type:'FeatureCollection', features }, null, 2)], { type:'application/json' }));
+  a.download = 'car_imovel.geojson';
+  a.click();
+}
+
+// ── Helpers ──────────────────────────────────────────────────────
+function carSetStatus(msg, tipo) {
+  const el = document.getElementById('carStatus');
+  if (!el) return;
+  const cores = { gray:'var(--gray-400)', green:'var(--green)', red:'var(--red)', amber:'var(--amber)' };
+  el.textContent = msg;
+  el.style.color = cores[tipo] || cores.gray;
+}
+
+function carNotif(msg) {
+  let el = document.getElementById('carNotifEl');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'carNotifEl';
+    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1A7A52;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.2);transition:opacity .3s;pointer-events:none';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.style.opacity = '0', 3000);
 }
 
 // ================================================================

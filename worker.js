@@ -1,13 +1,6 @@
 /**
- * Cloudflare Worker — Proxy SICAR + SIAGAS
- * Repositório: rdias94/pasture
- * 
- * Endpoints disponíveis:
- *   GET /car?bbox=minx,miny,maxx,maxy&uf=GO&tipo=imoveis
- *   GET /car?numero=GO-5211404-67A1CB8D68D4459C9656A9...
- *   GET /car/app?bbox=...&uf=GO
- *   GET /car/reserva?bbox=...&uf=GO
- *   GET /siagas?lat=-17.93&lon=-51.71&raio=10000
+ * Cloudflare Worker — Proxy SICAR
+ * pasture.rdias94.workers.dev
  */
 
 const CORS = {
@@ -16,65 +9,39 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-const SICAR_BASE = 'https://geoserver.car.gov.br/geoserver/sicar/wfs';
-const SIAGAS_BASE = 'https://siagasweb.cprm.gov.br/layout/pesquisa_complexa.php';
-
-// Camadas disponíveis por tipo
-const SICAR_LAYERS = {
-  imoveis:  (uf) => `sicar:sicar_imoveis_${uf.toLowerCase()}`,
-  app:      (uf) => `sicar:sicar_apps_${uf.toLowerCase()}`,
-  reserva:  (uf) => `sicar:sicar_reserva_legal_${uf.toLowerCase()}`,
-  uso:      (uf) => `sicar:sicar_uso_restrito_${uf.toLowerCase()}`,
-  hidrografia: (uf) => `sicar:sicar_hidrografia_${uf.toLowerCase()}`,
-};
+const SICAR_GEOSERVER = 'https://geoserver.car.gov.br/geoserver';
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS });
     }
 
     try {
-      // ── /car — consulta WFS SICAR ──────────────────────────────
-      if (path === '/car' || path === '/car/') {
-        return await handleCAR(url, 'imoveis');
+      // ── /tiles/{uf}/{z}/{y}/{x} — proxy de tiles WMS do SICAR ──
+      if (path.startsWith('/tiles/')) {
+        return await handleTile(url, path);
       }
 
-      // ── /car/app — APP (Área de Preservação Permanente) ────────
-      if (path === '/car/app') {
-        return await handleCAR(url, 'app');
+      // ── /click?lat=&lon=&uf= — busca imóvel pelo ponto clicado ─
+      if (path === '/click') {
+        return await handleClick(url);
       }
 
-      // ── /car/reserva — Reserva Legal ──────────────────────────
-      if (path === '/car/reserva') {
-        return await handleCAR(url, 'reserva');
+      // ── /camadas?numero=&uf=&tipo= — APP, RL, Uso Restrito ─────
+      if (path === '/camadas') {
+        return await handleCamadas(url);
       }
 
-      // ── /car/uso — Uso Restrito ────────────────────────────────
-      if (path === '/car/uso') {
-        return await handleCAR(url, 'uso');
-      }
-
-      // ── /car/todas — todas as camadas de uma vez ───────────────
-      if (path === '/car/todas') {
-        return await handleTodasCamadas(url);
-      }
-
-      // ── /siagas — poços artesianos CPRM ───────────────────────
-      if (path === '/siagas') {
-        return await handleSIAGAS(url);
-      }
-
-      // ── / — health check ───────────────────────────────────────
+      // ── /health ────────────────────────────────────────────────
       if (path === '/' || path === '/health') {
-        return jsonResponse({ status: 'ok', worker: 'pasture-proxy', version: '1.0' });
+        return jsonResponse({ status: 'ok', worker: 'pasture-sicar-proxy', v: '2.0' });
       }
 
-      return jsonResponse({ error: 'Endpoint não encontrado', path }, 404);
+      return jsonResponse({ error: 'Endpoint não encontrado' }, 404);
 
     } catch (err) {
       return jsonResponse({ error: err.message }, 500);
@@ -82,143 +49,151 @@ export default {
   }
 };
 
-// ── Handler principal SICAR WFS ──────────────────────────────────
-async function handleCAR(url, tipoDefault) {
+// ── Proxy de tiles WMS → converte em tiles XYZ ──────────────────
+async function handleTile(url, path) {
+  // path: /tiles/{uf}/{z}/{y}/{x}
+  const parts = path.split('/').filter(Boolean);
+  // parts: ['tiles', uf, z, y, x]
+  if (parts.length < 5) return jsonResponse({ error: 'Path inválido' }, 400);
+
+  const uf = parts[1].toLowerCase();
+  const z = parseInt(parts[2]);
+  const y = parseInt(parts[3]);
+  const x = parseInt(parts[4]);
+
+  // Converter tile XYZ para BBOX EPSG:4326
+  const bbox = tileToBBox(x, y, z);
+
+  const wmsUrl = new URL(SICAR_GEOSERVER + '/sicar/wms');
+  wmsUrl.searchParams.set('service', 'WMS');
+  wmsUrl.searchParams.set('version', '1.1.1');
+  wmsUrl.searchParams.set('request', 'GetMap');
+  wmsUrl.searchParams.set('layers', 'sicar:sicar_imoveis_' + uf);
+  wmsUrl.searchParams.set('bbox', bbox);
+  wmsUrl.searchParams.set('width', '256');
+  wmsUrl.searchParams.set('height', '256');
+  wmsUrl.searchParams.set('srs', 'EPSG:4326');
+  wmsUrl.searchParams.set('format', 'image/png');
+  wmsUrl.searchParams.set('transparent', 'true');
+  wmsUrl.searchParams.set('styles', '');
+
+  const resp = await fetch(wmsUrl.toString(), {
+    headers: { 'User-Agent': 'PastureApp/2.0' },
+    cf: { cacheTtl: 3600, cacheEverything: true }
+  });
+
+  const img = await resp.arrayBuffer();
+  return new Response(img, {
+    headers: {
+      ...CORS,
+      'Content-Type': 'image/png',
+      'Cache-Control': 'public, max-age=3600'
+    }
+  });
+}
+
+// ── Busca imóvel pelo ponto clicado (GetFeatureInfo via WFS) ─────
+async function handleClick(url) {
+  const lat = parseFloat(url.searchParams.get('lat'));
+  const lon = parseFloat(url.searchParams.get('lon'));
+  const uf  = (url.searchParams.get('uf') || 'GO').toLowerCase();
+
+  if (isNaN(lat) || isNaN(lon)) {
+    return jsonResponse({ error: 'lat e lon obrigatórios' }, 400);
+  }
+
+  // Criar bbox pequeno ao redor do ponto clicado (~200m)
+  const delta = 0.002;
+  const bbox = (lon-delta) + ',' + (lat-delta) + ',' + (lon+delta) + ',' + (lat+delta);
+
+  const wfsUrl = new URL(SICAR_GEOSERVER + '/sicar/wfs');
+  wfsUrl.searchParams.set('service', 'WFS');
+  wfsUrl.searchParams.set('version', '2.0.0');
+  wfsUrl.searchParams.set('request', 'GetFeature');
+  wfsUrl.searchParams.set('typeName', 'sicar:sicar_imoveis_' + uf);
+  wfsUrl.searchParams.set('outputFormat', 'application/json');
+  wfsUrl.searchParams.set('CQL_FILTER', 'BBOX(geometry,' + bbox + ",'EPSG:4326')");
+  wfsUrl.searchParams.set('count', '5');
+  wfsUrl.searchParams.set('srsName', 'EPSG:4326');
+
+  const resp = await fetch(wfsUrl.toString(), {
+    headers: { 'User-Agent': 'PastureApp/2.0' },
+    cf: { cacheTtl: 60, cacheEverything: false }
+  });
+
+  if (!resp.ok) {
+    const txt = await resp.text();
+    return jsonResponse({ error: 'SICAR erro ' + resp.status, detail: txt.slice(0,300) }, 502);
+  }
+
+  const geojson = await resp.json();
+  return new Response(JSON.stringify(geojson), {
+    headers: { ...CORS, 'Content-Type': 'application/json' }
+  });
+}
+
+// ── Busca camadas ambientais (APP, RL, Uso Restrito) ─────────────
+async function handleCamadas(url) {
+  const numero = url.searchParams.get('numero');
   const bbox   = url.searchParams.get('bbox');
-  const uf     = (url.searchParams.get('uf') || 'GO').toUpperCase();
-  const tipo   = url.searchParams.get('tipo') || tipoDefault;
-  const numero = url.searchParams.get('numero'); // número do CAR
-  const limit  = url.searchParams.get('limit') || '50';
+  const uf     = (url.searchParams.get('uf') || 'GO').toLowerCase();
+  const tipo   = url.searchParams.get('tipo') || 'app';
 
-  const layerFn = SICAR_LAYERS[tipo];
-  if (!layerFn) {
-    return jsonResponse({ error: 'Tipo inválido. Use: imoveis, app, reserva, uso, hidrografia' }, 400);
-  }
+  const layerMap = {
+    app:    'sicar:sicar_apps_' + uf,
+    reserva:'sicar:sicar_reserva_legal_' + uf,
+    uso:    'sicar:sicar_uso_restrito_' + uf,
+    imovel: 'sicar:sicar_imoveis_' + uf,
+  };
 
-  const layer = layerFn(uf);
+  const layer = layerMap[tipo];
+  if (!layer) return jsonResponse({ error: 'tipo inválido' }, 400);
 
-  // Montar CQL_FILTER
-  let cqlFilter = '';
+  let cql = '';
   if (numero) {
-    // Busca por número do CAR
-    cqlFilter = `COD_IMOVEL='${numero}'`;
+    cql = "COD_IMOVEL='" + numero + "'";
   } else if (bbox) {
-    // Busca por bounding box
-    // BBOX formato: minLon,minLat,maxLon,maxLat
-    cqlFilter = `BBOX(geometry,${bbox},'EPSG:4326')`;
+    cql = 'BBOX(geometry,' + bbox + ",'EPSG:4326')";
   } else {
-    return jsonResponse({ error: 'Forneça bbox ou numero do CAR' }, 400);
+    return jsonResponse({ error: 'Forneça numero ou bbox' }, 400);
   }
 
-  const wfsUrl = new URL(SICAR_BASE);
+  const wfsUrl = new URL(SICAR_GEOSERVER + '/sicar/wfs');
   wfsUrl.searchParams.set('service', 'WFS');
   wfsUrl.searchParams.set('version', '2.0.0');
   wfsUrl.searchParams.set('request', 'GetFeature');
   wfsUrl.searchParams.set('typeName', layer);
   wfsUrl.searchParams.set('outputFormat', 'application/json');
-  wfsUrl.searchParams.set('CQL_FILTER', cqlFilter);
-  wfsUrl.searchParams.set('count', limit);
+  wfsUrl.searchParams.set('CQL_FILTER', cql);
+  wfsUrl.searchParams.set('count', '20');
   wfsUrl.searchParams.set('srsName', 'EPSG:4326');
 
   const resp = await fetch(wfsUrl.toString(), {
-    headers: { 'User-Agent': 'PastureApp/1.0 (agro planning tool)' },
-    cf: { cacheTtl: 300, cacheEverything: true } // cache 5 min
+    headers: { 'User-Agent': 'PastureApp/2.0' },
+    cf: { cacheTtl: 300, cacheEverything: true }
   });
 
   if (!resp.ok) {
-    const text = await resp.text();
-    return jsonResponse({ error: 'SICAR retornou erro', status: resp.status, detail: text.slice(0, 500) }, 502);
+    const txt = await resp.text();
+    return jsonResponse({ error: 'SICAR erro ' + resp.status, detail: txt.slice(0,300) }, 502);
   }
 
   const geojson = await resp.json();
-
-  // Enriquecer features com metadados úteis
-  if (geojson.features) {
-    geojson.features = geojson.features.map(f => ({
-      ...f,
-      properties: {
-        ...f.properties,
-        _tipo: tipo,
-        _uf: uf,
-        _layer: layer
-      }
-    }));
-  }
-
   return new Response(JSON.stringify(geojson), {
     headers: { ...CORS, 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300' }
   });
 }
 
-// ── Handler todas as camadas de um imóvel ────────────────────────
-async function handleTodasCamadas(url) {
-  const numero = url.searchParams.get('numero');
-  const bbox   = url.searchParams.get('bbox');
-  const uf     = (url.searchParams.get('uf') || 'GO').toUpperCase();
-
-  if (!numero && !bbox) {
-    return jsonResponse({ error: 'Forneça numero ou bbox' }, 400);
-  }
-
-  const tipos = ['imoveis', 'app', 'reserva', 'uso'];
-
-  // Buscar todas em paralelo
-  const resultados = await Promise.allSettled(
-    tipos.map(async (tipo) => {
-      const u = new URL(url.toString());
-      u.searchParams.set('tipo', tipo);
-      const r = await handleCAR(u, tipo);
-      const data = await r.json();
-      return { tipo, data };
-    })
-  );
-
-  const combined = { type: 'FeatureCollection', camadas: {} };
-  resultados.forEach(res => {
-    if (res.status === 'fulfilled') {
-      combined.camadas[res.value.tipo] = res.value.data;
-    }
-  });
-
-  return new Response(JSON.stringify(combined), {
-    headers: { ...CORS, 'Content-Type': 'application/json' }
-  });
+// ── Converter tile XYZ para BBOX EPSG:4326 ──────────────────────
+function tileToBBox(x, y, z) {
+  const n = Math.pow(2, z);
+  const west  =  (x / n) * 360 - 180;
+  const east  =  ((x + 1) / n) * 360 - 180;
+  const north =  Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI;
+  const south =  Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180 / Math.PI;
+  return west + ',' + south + ',' + east + ',' + north;
 }
 
-// ── Handler SIAGAS — poços artesianos ────────────────────────────
-async function handleSIAGAS(url) {
-  const lat  = url.searchParams.get('lat');
-  const lon  = url.searchParams.get('lon');
-  const raio = url.searchParams.get('raio') || '10000'; // metros
-
-  if (!lat || !lon) {
-    return jsonResponse({ error: 'Forneça lat e lon' }, 400);
-  }
-
-  // SIAGAS REST API — busca por ponto e raio
-  const siagasUrl = new URL('https://siagasweb.cprm.gov.br/layout/pesquisa_complexa.php');
-  siagasUrl.searchParams.set('lat', lat);
-  siagasUrl.searchParams.set('lon', lon);
-  siagasUrl.searchParams.set('raio', raio);
-  siagasUrl.searchParams.set('tipo', 'json');
-
-  try {
-    const resp = await fetch(siagasUrl.toString(), {
-      headers: { 'User-Agent': 'PastureApp/1.0' },
-      cf: { cacheTtl: 3600, cacheEverything: true }
-    });
-
-    if (!resp.ok) throw new Error('SIAGAS HTTP ' + resp.status);
-    const data = await resp.json();
-    return new Response(JSON.stringify(data), {
-      headers: { ...CORS, 'Content-Type': 'application/json' }
-    });
-  } catch (err) {
-    return jsonResponse({ error: 'SIAGAS indisponível: ' + err.message, dados: [] }, 200);
-  }
-}
-
-// ── Helpers ──────────────────────────────────────────────────────
 function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
