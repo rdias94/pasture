@@ -485,6 +485,15 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-9
     <div class="car-sidebar">
       <div class="car-sidebar-body">
 
+        <!-- Busca por município ou coordenada -->
+        <div class="car-field">
+          <label>Buscar município ou coordenada</label>
+          <div style="display:flex;gap:6px">
+            <input id="carBusca" placeholder="Ex: Jataí GO ou -17.88,-51.71" style="flex:1;padding:7px 10px;border:1px solid var(--gray-200);border-radius:6px;font-family:var(--font);font-size:13px;outline:none" onkeydown="if(event.key==='Enter') carNavegar()">
+            <button class="btn btn-sm btn-primary" onclick="carNavegar()" style="flex-shrink:0">Ir</button>
+          </div>
+        </div>
+
         <!-- UF selector -->
         <div class="car-field">
           <label>Estado (UF)</label>
@@ -2232,23 +2241,33 @@ function initPanelCAR() {
 
 // ── Carregar tiles WMS do SICAR via Worker ───────────────────────
 function carCarregarWMS() {
-  if (carWMSLayer) {
-    carMapa.removeLayer(carWMSLayer);
-    carWMSLayer = null;
-  }
-
+  if (carWMSLayer) { carMapa.removeLayer(carWMSLayer); carWMSLayer = null; }
   if (!document.getElementById('layerImovel')?.checked) return;
 
-  // Tiles roteados pelo Worker: /tiles/{uf}/{z}/{y}/{x}
-  carWMSLayer = L.tileLayer(
-    WORKER_URL + '/tiles/' + carUFAtual.toLowerCase() + '/{z}/{y}/{x}',
-    {
-      opacity: 0.7,
-      maxZoom: 20,
-      attribution: '© SICAR/SFB'
-    }
-  );
+  // WMS direto do SICAR — funciona sem proxy (tiles são <img>, sem CORS)
+  carWMSLayer = L.tileLayer.wms('https://geoserver.car.gov.br/geoserver/sicar/wms', {
+    layers: 'sicar:sicar_imoveis_' + carUFAtual.toLowerCase(),
+    format: 'image/png',
+    transparent: true,
+    opacity: 0.75,
+    version: '1.1.1',
+    attribution: '© SICAR/SFB',
+    styles: '',
+    minZoom: 10
+  });
   carWMSLayer.addTo(carMapa);
+
+  carMapa.off('zoomend', carCheckZoom);
+  carMapa.on('zoomend', carCheckZoom);
+  carCheckZoom();
+}
+
+function carCheckZoom() {
+  if (!carMapa) return;
+  const z = carMapa.getZoom();
+  if (z < 10) {
+    carSetStatus('⚠ Aproxime mais o mapa para ver os imóveis CAR', 'amber');
+  }
 }
 
 // ── Trocar UF ────────────────────────────────────────────────────
@@ -2464,6 +2483,45 @@ function carZoomFazenda() {
   const parts = coordVal.split(',').map(s => parseFloat(s.trim()));
   if (parts.length >= 2 && !isNaN(parts[0])) {
     carMapa.setView([parts[0], parts[1]], 14);
+  }
+}
+
+async function carNavegar() {
+  const val = document.getElementById('carBusca')?.value?.trim();
+  if (!val || !carMapa) return;
+
+  // Tentar interpretar como coordenadas lat,lon
+  const parts = val.split(',').map(s => parseFloat(s.trim()));
+  if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    carMapa.setView([parts[0], parts[1]], 14);
+    carSetStatus('Navegando para ' + parts[0].toFixed(4) + ', ' + parts[1].toFixed(4));
+    return;
+  }
+
+  // Geocodificar via Nominatim
+  carSetStatus('⏳ Buscando...', 'gray');
+  try {
+    const query = encodeURIComponent(val + ', Brasil');
+    const resp = await fetch('https://nominatim.openstreetmap.org/search?q=' + query + '&format=json&limit=1&countrycodes=br', {
+      headers: { 'Accept-Language': 'pt-BR', 'User-Agent': 'PastureApp/1.0' }
+    });
+    const data = await resp.json();
+    if (data && data[0]) {
+      const lat = parseFloat(data[0].lat);
+      const lon = parseFloat(data[0].lon);
+      carMapa.setView([lat, lon], 13);
+      carSetStatus('✓ ' + data[0].display_name.split(',')[0], 'green');
+      // Atualizar UF se detectável
+      const ufMatch = data[0].display_name.match(/(GO|MT|MS|MG|SP|PR|BA|TO|PA|RO|MA|PI|RS|SC|RJ|ES|PE|CE|AM|AC|RR|AP|DF)/);
+      if (ufMatch) {
+        const sel = document.getElementById('carUF');
+        if (sel) { sel.value = ufMatch[1]; carTrocarUF(ufMatch[1]); }
+      }
+    } else {
+      carSetStatus('Local não encontrado. Tente coordenadas lat,lon.', 'amber');
+    }
+  } catch(e) {
+    carSetStatus('Erro na busca: ' + e.message, 'red');
   }
 }
 
