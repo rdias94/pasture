@@ -726,6 +726,8 @@ function fecharModais() {
 }
 
 function selecionarFazenda(id) {
+  // Limpar estado visual antes de trocar de fazenda
+  limparEstadoFazenda();
   setFazendaAtiva(id);
   fazendaAtiva = getFazenda(id);
   renderCadastro();
@@ -734,6 +736,44 @@ function selecionarFazenda(id) {
   carregarRegua(id);
   carregarOF(id);
   showPanel(1);
+}
+
+function limparEstadoFazenda() {
+  // Limpar campos de identificação
+  ['nomeFazenda','cidade','areaTotalFaz','areaPastagTotal','coordFaz','nomeProprietario'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  const est = document.getElementById('estado'); if(est) est.value = '';
+  // Limpar precipitação
+  MESES.forEach((_,i) => { const el = document.getElementById('chuva_'+i); if(el) el.value = ''; });
+  // Limpar mapa
+  if(mapaLayerGroup) mapaLayerGroup.clearLayers();
+  if(mapaDrawnItems) mapaDrawnItems.clearLayers();
+  const legEl = document.getElementById('mapaLegenda'); if(legEl) legEl.innerHTML = '';
+  const resEl = document.getElementById('mapaResumo'); if(resEl) resEl.style.display = 'none';
+  const stEl = document.getElementById('mapaStatus'); if(stEl) stEl.textContent = 'Importe um KML para visualizar';
+  const expEl = document.getElementById('btnExportKML'); if(expEl) expEl.style.display = 'none';
+  const rstEl = document.getElementById('btnResetMapa'); if(rstEl) rstEl.style.display = 'none';
+  const kmlNome = document.getElementById('kmzNome'); if(kmlNome) kmlNome.textContent = 'Clique para selecionar KML / KMZ';
+  const kmlStatus = document.getElementById('kmlImportStatus'); if(kmlStatus) kmlStatus.style.display = 'none';
+  // Limpar OF
+  areas = []; areaCount = 0; seqMesesSel = [];
+  ['cargaUA','seqMS','seqAprov','seqCons','seqDias'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = id === 'seqAprov' ? '85' : id === 'seqCons' ? '10.935' : id === 'seqDias' ? '30' : '';
+  });
+  document.querySelectorAll('.seq-month-btn').forEach(btn => btn.classList.remove('on'));
+  const seqRes = document.getElementById('seqResult'); if(seqRes) seqRes.textContent = '';
+  // Limpar balanço
+  ['balancoStripPastejo','balancoStripSeq','balancoStrip','balancoAlert'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.innerHTML = '';
+  });
+  if(_balChart) { _balChart.destroy(); _balChart = null; }
+  // Limpar climatologia
+  const climaD = document.getElementById('climaDetalhes'); if(climaD) climaD.style.display = 'none';
+  if(climaChartInstance) { climaChartInstance.destroy(); climaChartInstance = null; }
+  // Rebuild grid vazio
+  buildGridRows();
 }
 
 function atualizarBarraFazenda() {
