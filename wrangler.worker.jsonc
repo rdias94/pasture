@@ -1,0 +1,17 @@
+{
+  // Config do WORKER (API). Nome não-padrão de propósito: o Cloudflare Pages
+  // (projeto pasture-6hs) NÃO deve ler este arquivo — ele serve só pra eu
+  // publicar o worker com:  npx wrangler deploy -c wrangler.worker.jsonc
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pasture",
+  "main": "worker_api.js",
+  "compatibility_date": "2026-05-30",
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "pasture-db",
+      "database_id": "b24c5d07-670b-4a08-86fe-1fd111f02d2d"
+    }
+  ]
+}
