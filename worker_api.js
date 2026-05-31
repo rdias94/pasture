@@ -71,6 +71,18 @@ export default {
     const usuario = await authMiddleware(request, env);
     if (!usuario) return err('Não autorizado', 401);
 
+    // ── TROCAR PRÓPRIA SENHA ──────────────────────────────────────
+    if (path === '/api/me/senha' && method === 'POST') {
+      const { senhaNova } = await request.json();
+      if (!senhaNova || String(senhaNova).length < 4) {
+        return err('Senha muito curta (mínimo 4 caracteres)', 400);
+      }
+      await env.DB.prepare('UPDATE usuarios SET senha=? WHERE id=?')
+        .bind(senhaNova, usuario.id).run();
+      // novo token (base64 nome:senha) pro frontend seguir autenticado
+      return json({ ok: true, token: btoa(`${usuario.nome}:${senhaNova}`) });
+    }
+
     // ── GRUPOS ────────────────────────────────────────────────────
     if (path === '/api/grupos') {
       if (method === 'GET') {

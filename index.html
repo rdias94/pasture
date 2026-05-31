@@ -218,6 +218,11 @@ body{font-family:var(--font);background:var(--gray-50);color:var(--gray-900);fon
         <button onclick="addUser()">+</button>
       </div>
     </div>
+    <div style="font-size:9px;font-weight:600;color:rgba(255,255,255,.3);letter-spacing:.06em;text-transform:uppercase;margin:9px 0 5px">MINHA SENHA</div>
+    <div class="user-add-row">
+      <input type="password" id="novaSenha" placeholder="nova senha" onkeydown="if(event.key==='Enter')trocarSenha()">
+      <button onclick="trocarSenha()" title="Trocar minha senha">↻</button>
+    </div>
     <button onclick="doLogout()" style="width:100%;margin-top:9px;padding:5px;background:rgba(192,57,43,.15);border:1px solid rgba(192,57,43,.3);border-radius:5px;color:#e74c3c;font-size:11px;cursor:pointer">Sair</button>
   </div>
 </div>
@@ -779,13 +784,14 @@ async function abrirModalFazenda(grupoIdPre) {
 function renderConsultoresModal(selecionados) {
   const users = getUsers();
   const el = document.getElementById('mfConsultores');
-  const consultores = users.filter(u => (u.nome || u.name) !== ADMIN_USER);
+  const consultores = users.filter(u => { const n = u.nome || u.name; return n && n !== ADMIN_USER; });
   if (consultores.length === 0) { el.innerHTML = '<span style="font-size:11px;color:var(--gray-400)">Nenhum consultor cadastrado</span>'; return; }
-  el.innerHTML = consultores.map(u =>
-    `<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:3px 8px;border:1px solid var(--gray-200);border-radius:6px">
-      <input type="checkbox" value="${u.name}" class="consultor-check" ${(selecionados||[]).includes(u.name)?'checked':''}> ${u.name}
-    </label>`
-  ).join('');
+  el.innerHTML = consultores.map(u => {
+    const n = u.nome || u.name;
+    return `<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:3px 8px;border:1px solid var(--gray-200);border-radius:6px">
+      <input type="checkbox" value="${n}" class="consultor-check" ${(selecionados||[]).includes(n)?'checked':''}> ${n}
+    </label>`;
+  }).join('');
 }
 
 async function salvarFazenda() {
@@ -1607,6 +1613,23 @@ function doLogout() {
 }
 
 function toggleUserPanel() { document.getElementById('userPanel').classList.toggle('open'); }
+
+async function trocarSenha() {
+  const inp = document.getElementById('novaSenha');
+  const nova = (inp.value || '');
+  if (nova.length < 4) { alert('A nova senha precisa de ao menos 4 caracteres.'); return; }
+  try {
+    const r = await apiPost('/api/me/senha', { senhaNova: nova });
+    if (r && r.token) {
+      _token = r.token;
+      const sess = JSON.parse(localStorage.getItem('pp_session') || '{}');
+      sess.token = _token;
+      localStorage.setItem('pp_session', JSON.stringify(sess));
+    }
+    inp.value = '';
+    mostrarToast('✓ Senha alterada');
+  } catch(e) { alert('Erro ao trocar senha: ' + e.message); }
+}
 
 async function addUser() {
   const name = (document.getElementById('newUserName').value || '').trim().toLowerCase();
