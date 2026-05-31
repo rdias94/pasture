@@ -841,6 +841,12 @@ function carregarDadosFazenda(id) {
   } else {
     document.getElementById('nomeProprietario').value = '';
   }
+
+  // Restaurar KML salvo (recarrega mapa automaticamente)
+  if (document.getElementById('mapaLeaflet')) {
+    if (!mapaInited) initMapa();
+    restaurarKMLSalvo(id);
+  }
 }
 
 function salvarRegua() {
@@ -1134,6 +1140,53 @@ function renderBalancoChart(pastejo,seq,carga) {
 // ── MAPA ─────────────────────────────────────────────────────────
 let mapaInstance=null,mapaInited=false,mapaLayerGroup=null,mapaDrawnItems=null,mapaDrawControl=null;
 
+
+// ── RESTAURAR KML SALVO ──────────────────────────────────────────
+async function restaurarKMLSalvo(id) {
+  const saved = dbGet('kml_' + id, null);
+  if (!saved || !saved.texto) return false;
+
+  const kmlText = saved.texto;
+  const nomeEl = document.getElementById('kmzNome');
+  if (nomeEl) nomeEl.textContent = saved.nome || 'KML salvo';
+
+  const statusEl = document.getElementById('kmlImportStatus');
+  if (statusEl) {
+    statusEl.style.display = 'block';
+    statusEl.innerHTML = '⏳ Restaurando KML salvo...';
+  }
+
+  try {
+    // Reprocessar mapa
+    const blob = new Blob([kmlText], { type: 'application/vnd.google-earth.kml+xml' });
+    const fakeFile = new File([blob], saved.nome || 'fazenda.kml');
+    processarKMLParaMapa(fakeFile).catch(e => console.warn('Mapa KML restaurado:', e));
+
+    // Reextrai coords e busca clima/chuva
+    const coords = extractKMLCoords(kmlText);
+    if (coords) {
+      const { lat, lon } = coords;
+      document.getElementById('coordFaz').value = lat.toFixed(6) + ',' + lon.toFixed(6);
+      // Não rebusca chuva automaticamente — já está salva nos dados básicos
+    }
+
+    if (statusEl) {
+      statusEl.innerHTML = '✓ KML restaurado — <strong>' + (saved.nome||'') + '</strong>';
+      setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+    }
+
+    const expEl = document.getElementById('btnExportKML');
+    const rstEl = document.getElementById('btnResetMapa');
+    if (expEl) expEl.style.display = '';
+    if (rstEl) rstEl.style.display = '';
+    return true;
+  } catch(e) {
+    console.warn('Erro ao restaurar KML:', e);
+    if (statusEl) statusEl.style.display = 'none';
+    return false;
+  }
+}
+
 function initMapa() {
   if(mapaInited) return;
   mapaInited=true;
@@ -1202,6 +1255,11 @@ function resetarMapa() {
   document.getElementById('mapaStatus').textContent='Importe um KML para visualizar';
   document.getElementById('btnResetMapa').style.display='none';
   document.getElementById('btnExportKML').style.display='none';
+  const nomeEl = document.getElementById('kmzNome');
+  if(nomeEl) nomeEl.textContent = 'Clique para selecionar KML / KMZ';
+  // Apagar KML salvo desta fazenda
+  const fazId = dbGet('fazenda_ativa', null);
+  if(fazId) localStorage.removeItem('pp_kml_' + fazId);
   areas=[]; areaCount=0; buildGridRows(); calcBalanco();
 }
 
@@ -1407,6 +1465,17 @@ async function handleKMZ(input) {
       kmlText = await kmlFile.async('string');
     } else {
       kmlText = await file.text();
+    }
+
+    // Salvar KML bruto no localStorage para restauração futura
+    const fazId = dbGet('fazenda_ativa', null);
+    if (fazId) {
+      try {
+        dbSet('kml_' + fazId, { nome: file.name, texto: kmlText, savedAt: new Date().toISOString() });
+      } catch(e) {
+        // KML muito grande para localStorage — ignorar silenciosamente
+        console.warn('KML não salvo (arquivo muito grande):', e);
+      }
     }
 
     // Extrair coordenadas do KML
