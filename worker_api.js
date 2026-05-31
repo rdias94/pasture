@@ -47,6 +47,7 @@ async function authMiddleware(request, env) {
 // ================================================================
 export default {
   async fetch(request, env) {
+   try {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/$/, '');
     const method = request.method;
@@ -314,5 +315,8 @@ export default {
     }
 
     return err('Rota não encontrada', 404);
+   } catch (e) {
+    return json({ error: e && e.message ? e.message : String(e) }, 500);
+   }
   }
 };
