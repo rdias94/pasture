@@ -571,28 +571,128 @@ let climaChartInstance = null;
 let fazendaAtiva = null;
 
 // ── DB LOCAL ────────────────────────────────────────────────────
+
+// ================================================================
+// CAMADA DE API — Cloudflare Worker
+// ================================================================
+const API = 'https://pasture.rdias94.workers.dev';
+let _token = null;
+
+function apiHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': _token ? 'Bearer ' + _token : ''
+  };
+}
+
+async function apiGet(path) {
+  const r = await fetch(API + path, { headers: apiHeaders() });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function apiPut(path, body) {
+  const r = await fetch(API + path, {
+    method: 'PUT', headers: apiHeaders(), body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function apiPost(path, body) {
+  const r = await fetch(API + path, {
+    method: 'POST', headers: apiHeaders(), body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function apiDelete(path) {
+  const r = await fetch(API + path, { method: 'DELETE', headers: apiHeaders() });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+// Cache local leve (evita re-fetch desnecessário)
+const _cache = {};
+function cacheSet(k, v) { _cache[k] = v; }
+function cacheGet(k) { return _cache[k]; }
+function cacheDel(k) { delete _cache[k]; }
+
+// Compatibilidade: dbGet/dbSet ainda usados para estado de sessão e UI
 function dbGet(key, def) {
   try { return JSON.parse(localStorage.getItem('pp_' + key)) ?? def; } catch(e) { return def; }
 }
 function dbSet(key, val) {
   try { localStorage.setItem('pp_' + key, JSON.stringify(val)); } catch(e) {}
 }
+
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
-function getGrupos() { return dbGet('grupos', []); }
-function setGrupos(g) { dbSet('grupos', g); }
-function getFazendas() { return dbGet('fazendas', []); }
-function setFazendas(f) { dbSet('fazendas', f); }
-function getFazenda(id) { return getFazendas().find(f => f.id === id) || null; }
-function getFazendaAtiva() { const id = dbGet('fazenda_ativa', null); return id ? getFazenda(id) : null; }
+
+// ── GRUPOS ───────────────────────────────────────────────────────
+async function getGrupos() {
+  if (cacheGet('grupos')) return cacheGet('grupos');
+  const r = await apiGet('/api/grupos');
+  cacheSet('grupos', r);
+  return r;
+}
+async function setGrupos() {} // não usado diretamente
+
+// ── FAZENDAS ──────────────────────────────────────────────────────
+let _fazendas = [];
+async function getFazendas() {
+  if (cacheGet('fazendas')) return cacheGet('fazendas');
+  const r = await apiGet('/api/fazendas');
+  // Normalizar campos snake_case → camelCase
+  const norm = r.map(f => ({
+    id: f.id, nome: f.nome,
+    grupoId: f.grupo_id,
+    municipio: f.municipio, uf: f.uf,
+    areaTotalHa: f.area_total_ha,
+    consultores: f.consultores || [],
+    criadoEm: f.criado_em
+  }));
+  cacheSet('fazendas', norm);
+  return norm;
+}
+async function getFazenda(id) {
+  const fzs = await getFazendas();
+  return fzs.find(f => f.id === id) || null;
+}
+function getFazendaAtiva() {
+  const id = dbGet('fazenda_ativa', null);
+  if (!id) return null;
+  // Retorna do cache síncrono se disponível
+  const cached = cacheGet('fazendas');
+  if (cached) return cached.find(f => f.id === id) || null;
+  return null;
+}
 function setFazendaAtiva(id) { dbSet('fazenda_ativa', id); }
 
+// Usuários (cache simples)
+let _usuarios = [];
+function getUsers() { return _usuarios; }
+async function carregarUsuarios() {
+  try {
+    _usuarios = await apiGet('/api/usuarios');
+  } catch(e) { _usuarios = []; }
+}
+async function saveUsers(users) {} // gerenciado pela API
+
+
 // ── CADASTRO ────────────────────────────────────────────────────
-function renderCadastro() {
-  const grupos = getGrupos();
-  const fazendas = getFazendas();
-  const ativaId = dbGet('fazenda_ativa', null);
+async function renderCadastro() {
   const el = document.getElementById('listaGrupos');
   if (!el) return;
+  el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--gray-400);font-size:12px">⏳ Carregando...</div>';
+  let grupos, fazendas;
+  try {
+    [grupos, fazendas] = await Promise.all([getGrupos(), getFazendas()]);
+  } catch(e) {
+    el.innerHTML = '<div class="alert alert-red">Erro ao carregar dados: ' + e.message + '</div>';
+    return;
+  }
+  const ativaId = dbGet('fazenda_ativa', null);
 
   if (grupos.length === 0 && fazendas.length === 0) {
     el.innerHTML = '<div style="text-align:center;padding:56px;color:var(--gray-400)"><div style="font-size:44px;margin-bottom:14px">🏡</div><div style="font-size:14px;font-weight:600;margin-bottom:6px">Nenhuma fazenda cadastrada</div><div style="font-size:12px">Crie um grupo e adicione fazendas para começar</div></div>';
@@ -641,28 +741,31 @@ function abrirModalGrupo(id) {
   setTimeout(() => document.getElementById('mgNome').focus(), 100);
 }
 
-function salvarGrupo() {
+async function salvarGrupo() {
   const nome = document.getElementById('mgNome').value.trim();
   if (!nome) { alert('Informe o nome do grupo'); return; }
-  const grupos = getGrupos();
   const m = document.getElementById('modalGrupo');
   const obj = { nome, doc: document.getElementById('mgDoc').value, contato: document.getElementById('mgContato').value };
-  if (m.dataset.editId) {
-    const idx = grupos.findIndex(g => g.id === m.dataset.editId);
-    if (idx >= 0) grupos[idx] = { ...grupos[idx], ...obj };
-  } else { grupos.push({ id: uid(), criadoEm: new Date().toISOString(), ...obj }); }
-  setGrupos(grupos);
-  fecharModais();
-  renderCadastro();
+  try {
+    if (m.dataset.editId) {
+      await apiPut('/api/grupos/' + m.dataset.editId, obj);
+    } else {
+      obj.id = uid();
+      await apiPost('/api/grupos', obj);
+    }
+    cacheDel('grupos');
+    fecharModais();
+    renderCadastro();
+  } catch(e) { alert('Erro ao salvar grupo: ' + e.message); }
 }
 
-function abrirModalFazenda(grupoIdPre) {
+async function abrirModalFazenda(grupoIdPre) {
   const m = document.getElementById('modalFazenda');
   m.classList.add('open');
   delete m.dataset.editId;
   ['mfNome','mfMunicipio','mfArea'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('mfUF').value = '';
-  const grupos = getGrupos();
+  const grupos = await getGrupos();
   const sel = document.getElementById('mfGrupo');
   sel.innerHTML = '<option value="">— Sem grupo —</option>' + grupos.map(g => `<option value="${g.id}">${g.nome}</option>`).join('');
   if (grupoIdPre) sel.value = grupoIdPre;
@@ -682,10 +785,9 @@ function renderConsultoresModal(selecionados) {
   ).join('');
 }
 
-function salvarFazenda() {
+async function salvarFazenda() {
   const nome = document.getElementById('mfNome').value.trim();
   if (!nome) { alert('Informe o nome da fazenda'); return; }
-  const fazendas = getFazendas();
   const m = document.getElementById('modalFazenda');
   const consultoresSel = [...document.querySelectorAll('.consultor-check:checked')].map(c => c.value);
   const dados = {
@@ -693,19 +795,24 @@ function salvarFazenda() {
     municipio: document.getElementById('mfMunicipio').value.trim(),
     uf: document.getElementById('mfUF').value,
     areaTotalHa: parseFloat(document.getElementById('mfArea').value) || null,
-    consultores: consultoresSel, updatedAt: new Date().toISOString()
+    consultores: consultoresSel
   };
-  if (m.dataset.editId) {
-    const idx = fazendas.findIndex(f => f.id === m.dataset.editId);
-    if (idx >= 0) fazendas[idx] = { ...fazendas[idx], ...dados };
-  } else { fazendas.push({ id: uid(), criadoEm: new Date().toISOString(), ...dados }); }
-  setFazendas(fazendas);
-  fecharModais();
-  renderCadastro();
+  try {
+    if (m.dataset.editId) {
+      await apiPut('/api/fazendas/' + m.dataset.editId, dados);
+    } else {
+      dados.id = uid();
+      await apiPost('/api/fazendas', dados);
+    }
+    cacheDel('fazendas');
+    fecharModais();
+    renderCadastro();
+  } catch(e) { alert('Erro ao salvar fazenda: ' + e.message); }
 }
 
-function editarFazenda(id) {
-  const f = getFazenda(id);
+
+async function editarFazenda(id) {
+  const f = await getFazenda(id);
   if (!f) return;
   abrirModalFazenda();
   const m = document.getElementById('modalFazenda');
@@ -714,7 +821,7 @@ function editarFazenda(id) {
   document.getElementById('mfMunicipio').value = f.municipio||'';
   document.getElementById('mfUF').value = f.uf||'';
   document.getElementById('mfArea').value = f.areaTotalHa||'';
-  const grupos = getGrupos();
+  const grupos = await getGrupos();
   const sel = document.getElementById('mfGrupo');
   sel.innerHTML = '<option value="">— Sem grupo —</option>' + grupos.map(g => `<option value="${g.id}">${g.nome}</option>`).join('');
   sel.value = f.grupoId||'';
@@ -725,17 +832,16 @@ function fecharModais() {
   document.querySelectorAll('.modal-bg').forEach(m => m.classList.remove('open'));
 }
 
-function selecionarFazenda(id) {
-  // Limpar estado visual antes de trocar de fazenda
+async function selecionarFazenda(id) {
   limparEstadoFazenda();
   setFazendaAtiva(id);
-  fazendaAtiva = getFazenda(id);
+  fazendaAtiva = await getFazenda(id);
   renderCadastro();
   atualizarBarraFazenda();
-  carregarDadosFazenda(id);
-  carregarRegua(id);
-  carregarOF(id);
   showPanel(1);
+  await carregarDadosFazenda(id);
+  await carregarRegua(id);
+  await carregarOF(id);
 }
 
 function limparEstadoFazenda() {
@@ -789,71 +895,73 @@ function atualizarBarraFazenda() {
 }
 
 // ── SALVAR / CARREGAR ────────────────────────────────────────────
-function salvarDadosBasicos() {
+async function salvarDadosBasicos() {
   const id = dbGet('fazenda_ativa', null);
   if (!id) { alert('Selecione uma fazenda no Cadastro primeiro'); return; }
-  const dados = {
+  const coordRaw = document.getElementById('coordFaz').value || '';
+  const coordParts = coordRaw.split(',');
+  const body = {
     nomeFazenda: document.getElementById('nomeFazenda').value,
-    cidade: document.getElementById('cidade').value,
+    municipio: document.getElementById('cidade').value,
     uf: document.getElementById('estado').value,
-    areaTotalFaz: document.getElementById('areaTotalFaz').value,
-    areaPastagTotal: document.getElementById('areaPastagTotal').value,
-    coordFaz: document.getElementById('coordFaz').value,
-    chuva: MESES.map((_,i) => { const el = document.getElementById('chuva_'+i); return el?el.value:''; }),
-    savedAt: new Date().toISOString()
+    areaTotalHa: parseFloat(document.getElementById('areaTotalFaz').value) || null,
+    areaPastagemHa: parseFloat(document.getElementById('areaPastagTotal').value) || null,
+    coordLat: coordParts[0] ? parseFloat(coordParts[0]) : null,
+    coordLon: coordParts[1] ? parseFloat(coordParts[1]) : null,
+    chuva: MESES.map((_,i) => { const el = document.getElementById('chuva_'+i); return el ? parseFloat(el.value)||0 : 0; }),
+    kmlNome: document.getElementById('kmzNome').textContent || null,
+    kmlTexto: null  // KML salvo separadamente via salvarKML()
   };
-  dbSet('db_'+id, dados);
-  const fazendas = getFazendas();
-  const idx = fazendas.findIndex(f => f.id === id);
-  if (idx >= 0) {
-    fazendas[idx].municipio = dados.cidade;
-    fazendas[idx].uf = dados.uf;
-    fazendas[idx].areaTotalHa = dados.areaTotalFaz;
-    setFazendas(fazendas);
-  }
-  mostrarToast('✓ Dados básicos salvos');
-  renderCadastro();
+  try {
+    await apiPut('/api/fazendas/' + id + '/dados', body);
+    cacheDel('fazendas');
+    mostrarToast('✓ Dados básicos salvos');
+    renderCadastro();
+  } catch(e) { alert('Erro ao salvar: ' + e.message); }
 }
 
-function carregarDadosFazenda(id) {
-  const dados = dbGet('db_'+id, null);
+async function carregarDadosFazenda(id) {
   // Limpar campos
-  ['nomeFazenda','cidade','areaTotalFaz','areaPastagTotal','coordFaz'].forEach(i => {
-    const el = document.getElementById(i); if(el) el.value='';
+  ['nomeFazenda','cidade','areaTotalFaz','areaPastagTotal','coordFaz','nomeProprietario'].forEach(fid => {
+    const el = document.getElementById(fid); if(el) el.value = '';
   });
-  document.getElementById('estado').value='';
-  MESES.forEach((_,i)=>{ const el=document.getElementById('chuva_'+i); if(el) el.value=''; });
+  document.getElementById('estado').value = '';
+  MESES.forEach((_,i) => { const el = document.getElementById('chuva_'+i); if(el) el.value = ''; });
 
-  if (dados) {
-    if (dados.nomeFazenda) document.getElementById('nomeFazenda').value = dados.nomeFazenda;
-    if (dados.cidade) document.getElementById('cidade').value = dados.cidade;
-    if (dados.uf) document.getElementById('estado').value = dados.uf;
-    if (dados.areaTotalFaz) document.getElementById('areaTotalFaz').value = dados.areaTotalFaz;
-    if (dados.areaPastagTotal) document.getElementById('areaPastagTotal').value = dados.areaPastagTotal;
-    if (dados.coordFaz) document.getElementById('coordFaz').value = dados.coordFaz;
-    if (dados.chuva) dados.chuva.forEach((v,i)=>{ const el=document.getElementById('chuva_'+i); if(el&&v) el.value=v; });
-  }
+  try {
+    const dados = await apiGet('/api/fazendas/' + id + '/dados');
+    if (dados) {
+      if (dados.nome_fazenda) document.getElementById('nomeFazenda').value = dados.nome_fazenda;
+      if (dados.municipio) document.getElementById('cidade').value = dados.municipio;
+      if (dados.uf) document.getElementById('estado').value = dados.uf;
+      if (dados.area_total_ha) document.getElementById('areaTotalFaz').value = dados.area_total_ha;
+      if (dados.area_pastagem_ha) document.getElementById('areaPastagTotal').value = dados.area_pastagem_ha;
+      const coord = [dados.coord_lat, dados.coord_lon].filter(Boolean);
+      if (coord.length === 2) document.getElementById('coordFaz').value = coord.join(',');
+      if (dados.chuva) dados.chuva.forEach((v,i) => { const el = document.getElementById('chuva_'+i); if(el && v) el.value = v; });
+    }
+  } catch(e) { console.warn('Dados básicos:', e); }
 
-  const f = getFazenda(id);
+  // Proprietário vem do grupo
+  const f = await getFazenda(id);
   if (f?.grupoId) {
-    const g = getGrupos().find(x => x.id === f.grupoId);
+    const grupos = await getGrupos();
+    const g = grupos.find(x => x.id === f.grupoId);
     if (g) document.getElementById('nomeProprietario').value = g.nome;
-  } else {
-    document.getElementById('nomeProprietario').value = '';
   }
 
-  // Restaurar KML salvo (recarrega mapa automaticamente)
-  if (document.getElementById('mapaLeaflet')) {
-    if (!mapaInited) initMapa();
-    restaurarKMLSalvo(id);
-  }
+  // Restaurar KML salvo
+  if (!mapaInited) initMapa();
+  restaurarKMLdaAPI(id);
 }
 
-function salvarRegua() {
+async function salvarRegua() {
   const id = dbGet('fazenda_ativa', null);
   if (!id) { alert('Selecione uma fazenda primeiro'); return; }
-  dbSet('regua_'+id, getReguaLinhas());
-  mostrarToast('✓ Régua de referência salva');
+  try {
+    await apiPut('/api/fazendas/' + id + '/regua', getReguaLinhas());
+    mostrarToast('✓ Régua de referência salva');
+  } catch(e) { alert('Erro ao salvar régua: ' + e.message); }
 }
 
 function getReguaLinhas() {
@@ -866,8 +974,7 @@ function getReguaLinhas() {
   }));
 }
 
-function carregarRegua(id) {
-  const saved = dbGet('regua_'+id, null);
+async function carregarRegua(id) {
   const defaults = [
     { nivel:'Extensivo',          vals:[0,0,0,0.5,1,1,1,1,1,0.5,0.5,0.25] },
     { nivel:'Semi-intensivo',     vals:[0.5,0.5,0.5,1,2,2,2,2,2,1,1,0.5] },
@@ -875,7 +982,12 @@ function carregarRegua(id) {
     { nivel:'Intensivo Irrigado', vals:[8,9,10,10,11,12,12,11,10,10,9,8] },
     { nivel:'Silagem/Sequestro',  vals:[0,0,0,0,0,0,0,0,0,0,0,0] },
   ];
-  renderReguaBody(saved || defaults);
+  try {
+    const linhas = await apiGet('/api/fazendas/' + id + '/regua');
+    renderReguaBody(linhas.length > 0 ? linhas : defaults);
+  } catch(e) {
+    renderReguaBody(defaults);
+  }
 }
 
 function renderReguaBody(linhas) {
@@ -936,33 +1048,41 @@ function getReguaValores(nivel) {
   return l ? l.vals : Array(12).fill(0);
 }
 
-function salvarOF() {
+async function salvarOF() {
   const id = dbGet('fazenda_ativa', null);
   if (!id) { alert('Selecione uma fazenda primeiro'); return; }
-  dbSet('of_'+id, {
+  const body = {
     areas, seqMesesSel,
-    cargaUA: document.getElementById('cargaUA').value,
-    seqMS: document.getElementById('seqMS').value,
-    seqAprov: document.getElementById('seqAprov').value,
-    seqCons: document.getElementById('seqCons').value,
-    seqDias: document.getElementById('seqDias').value,
-    savedAt: new Date().toISOString()
-  });
-  mostrarToast('✓ Orçamentação forrageira salva');
+    cargaUA: parseFloat(document.getElementById('cargaUA').value) || null,
+    seqMS: parseFloat(document.getElementById('seqMS').value) || null,
+    seqAprov: parseFloat(document.getElementById('seqAprov').value) || 85,
+    seqCons: parseFloat(document.getElementById('seqCons').value) || 10.935,
+    seqDias: parseFloat(document.getElementById('seqDias').value) || 30,
+  };
+  try {
+    await apiPut('/api/fazendas/' + id + '/of', body);
+    mostrarToast('✓ Orçamentação forrageira salva');
+  } catch(e) { alert('Erro ao salvar OF: ' + e.message); }
 }
 
-function carregarOF(id) {
-  const saved = dbGet('of_'+id, null);
-  if (!saved) { areas=[]; areaCount=0; buildGridRows(); calcBalanco(); return; }
-  areas = saved.areas || [];
-  areaCount = areas.length;
-  seqMesesSel = saved.seqMesesSel || [];
-  ['cargaUA','seqMS','seqAprov','seqCons','seqDias'].forEach(k => {
-    if (saved[k] !== undefined) { const el=document.getElementById(k); if(el) el.value=saved[k]; }
-  });
-  document.querySelectorAll('.seq-month-btn').forEach(btn => {
-    btn.classList.toggle('on', seqMesesSel.includes(parseInt(btn.dataset.idx)));
-  });
+async function carregarOF(id) {
+  try {
+    const data = await apiGet('/api/fazendas/' + id + '/of');
+    areas = data.areas || [];
+    areaCount = areas.length;
+    seqMesesSel = data.config?.seq_meses_json ? JSON.parse(data.config.seq_meses_json) : [];
+    const cfg = data.config || {};
+    if (cfg.carga_ua) { const el=document.getElementById('cargaUA'); if(el) el.value=cfg.carga_ua; }
+    if (cfg.seq_ms) { const el=document.getElementById('seqMS'); if(el) el.value=cfg.seq_ms; }
+    if (cfg.seq_aprov) { const el=document.getElementById('seqAprov'); if(el) el.value=cfg.seq_aprov; }
+    if (cfg.seq_cons) { const el=document.getElementById('seqCons'); if(el) el.value=cfg.seq_cons; }
+    if (cfg.seq_dias) { const el=document.getElementById('seqDias'); if(el) el.value=cfg.seq_dias; }
+    document.querySelectorAll('.seq-month-btn').forEach(btn => {
+      btn.classList.toggle('on', seqMesesSel.includes(parseInt(btn.dataset.idx)));
+    });
+  } catch(e) {
+    areas = []; areaCount = 0; seqMesesSel = [];
+  }
   buildGridRows(); calcSeq(); calcBalanco();
 }
 
@@ -1257,9 +1377,7 @@ function resetarMapa() {
   document.getElementById('btnExportKML').style.display='none';
   const nomeEl = document.getElementById('kmzNome');
   if(nomeEl) nomeEl.textContent = 'Clique para selecionar KML / KMZ';
-  // Apagar KML salvo desta fazenda
-  const fazId = dbGet('fazenda_ativa', null);
-  if(fazId) localStorage.removeItem('pp_kml_' + fazId);
+  // KML na nuvem é mantido — apenas o mapa visual é limpo
   areas=[]; areaCount=0; buildGridRows(); calcBalanco();
 }
 
@@ -1323,92 +1441,148 @@ function popularAreasDoKML(hierarquia) {
   document.getElementById('btnResetMapa').style.display='';
 }
 
-// ── LOGIN ────────────────────────────────────────────────────────
-const ADMIN_USER='fagundes';
-const ADMIN_PASS='pasture2025';
-function getUsers(){return dbGet('users',[]);}
-function saveUsers(u){dbSet('users',u);}
+// ── LOGIN ────────────────────────────────────────────────────
+const ADMIN_USER = 'fagundes';
 
-function initLogin(){
-  const users=getUsers();
-  if(!users.find(u=>u.name==='gustavo')) {users.push({name:'gustavo',pass:'pasture2025'});saveUsers(users);}
-  const raw=localStorage.getItem('pp_session');
-  if(raw){
-    try{const s=JSON.parse(raw);if(s.expires>Date.now()){loginOk(s.user);return;}}catch(e){}
+async function initLogin() {
+  // Verificar sessão salva
+  const sess = localStorage.getItem('pp_session');
+  if (sess) {
+    try {
+      const s = JSON.parse(sess);
+      if (s.expires > Date.now() && s.token) {
+        _token = s.token;
+        // Verificar se token ainda é válido
+        try {
+          _usuarios = await apiGet('/api/usuarios');
+          loginOk(s.user, s.perfil);
+          return;
+        } catch(e) {
+          localStorage.removeItem('pp_session');
+        }
+      }
+    } catch(e) {}
     localStorage.removeItem('pp_session');
   }
   document.getElementById('loginOverlay').classList.remove('hidden');
-  setTimeout(()=>{const el=document.getElementById('loginUser');if(el)el.focus();},150);
+  setTimeout(() => { const el = document.getElementById('loginUser'); if(el) el.focus(); }, 150);
 }
 
-function doLogin(){
-  const user=(document.getElementById('loginUser').value||'').trim().toLowerCase();
-  const pass=(document.getElementById('loginPass').value||'');
-  const err=document.getElementById('loginErr');
-  err.textContent='';
-  if(!user||!pass){err.textContent='Preencha usuário e senha.';return;}
-  const ok=(user===ADMIN_USER&&pass===ADMIN_PASS)||!!getUsers().find(u=>u.name===user&&u.pass===pass);
-  if(!ok){err.textContent='Usuário ou senha incorretos.';return;}
-  localStorage.setItem('pp_session',JSON.stringify({user,expires:Date.now()+8*3600*1000}));
-  loginOk(user);
+async function doLogin() {
+  const nome = (document.getElementById('loginUser').value || '').trim().toLowerCase();
+  const senha = (document.getElementById('loginPass').value || '');
+  const err = document.getElementById('loginErr');
+  err.textContent = '';
+  if (!nome || !senha) { err.textContent = 'Preencha usuário e senha.'; return; }
+  try {
+    const r = await fetch(API + '/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome, senha })
+    });
+    if (!r.ok) { err.textContent = 'Usuário ou senha incorretos.'; return; }
+    const data = await r.json();
+    _token = data.token;
+    localStorage.setItem('pp_session', JSON.stringify({
+      user: nome, perfil: data.usuario.perfil,
+      token: _token, expires: Date.now() + 8 * 3600 * 1000
+    }));
+    _usuarios = await apiGet('/api/usuarios');
+    loginOk(nome, data.usuario.perfil);
+  } catch(e) {
+    err.textContent = 'Erro de conexão. Tente novamente.';
+    console.error(e);
+  }
 }
 
-function loginOk(user){
+function loginOk(user, perfil) {
   document.getElementById('loginOverlay').classList.add('hidden');
-  document.getElementById('loginUser').value='';
-  document.getElementById('loginPass').value='';
-  document.getElementById('userMenuLabel').textContent=user;
-  const isAdmin=user===ADMIN_USER;
-  const addSec=document.getElementById('userAddSection');
-  if(addSec) addSec.style.display=isAdmin?'':'none';
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPass').value = '';
+  document.getElementById('userMenuLabel').textContent = user;
+  const isAdmin = perfil === 'master';
+  const addSec = document.getElementById('userAddSection');
+  if (addSec) addSec.style.display = isAdmin ? '' : 'none';
   renderUserList(user);
   atualizarBarraFazenda();
-  const id=dbGet('fazenda_ativa',null);
-  if(id){fazendaAtiva=getFazenda(id);carregarDadosFazenda(id);carregarRegua(id);carregarOF(id);atualizarBarraFazenda();}
+  const id = dbGet('fazenda_ativa', null);
+  if (id) {
+    getFazenda(id).then(f => {
+      if (f) { fazendaAtiva = f; carregarDadosFazenda(id); carregarRegua(id); carregarOF(id); atualizarBarraFazenda(); }
+    });
+  }
 }
 
-function doLogout(){
+function doLogout() {
+  _token = null;
   localStorage.removeItem('pp_session');
+  cacheDel('grupos'); cacheDel('fazendas');
   document.getElementById('userPanel').classList.remove('open');
   document.getElementById('loginOverlay').classList.remove('hidden');
-  setTimeout(()=>{const el=document.getElementById('loginUser');if(el)el.focus();},150);
+  setTimeout(() => { const el = document.getElementById('loginUser'); if(el) el.focus(); }, 150);
 }
 
-function toggleUserPanel(){document.getElementById('userPanel').classList.toggle('open');}
+function toggleUserPanel() { document.getElementById('userPanel').classList.toggle('open'); }
 
-function addUser(){
-  const name=(document.getElementById('newUserName').value||'').trim().toLowerCase();
-  const pass=(document.getElementById('newUserPass').value||'');
-  if(!name||!pass){alert('Preencha usuário e senha');return;}
-  if(name===ADMIN_USER){alert('Nome reservado');return;}
-  const users=getUsers();
-  if(users.find(u=>u.name===name)){alert('Usuário já existe');return;}
-  users.push({name,pass}); saveUsers(users);
-  document.getElementById('newUserName').value='';
-  document.getElementById('newUserPass').value='';
-  const raw=localStorage.getItem('pp_session');
-  const currentUser=raw?JSON.parse(raw).user:ADMIN_USER;
-  renderUserList(currentUser);
-  mostrarToast('✓ Usuário '+name+' criado');
+async function addUser() {
+  const name = (document.getElementById('newUserName').value || '').trim().toLowerCase();
+  const pass = (document.getElementById('newUserPass').value || '');
+  if (!name || !pass) { alert('Preencha usuário e senha'); return; }
+  try {
+    await apiPost('/api/usuarios', { nome: name, senha: pass, perfil: 'consultor' });
+    _usuarios = await apiGet('/api/usuarios');
+    document.getElementById('newUserName').value = '';
+    document.getElementById('newUserPass').value = '';
+    const sess = JSON.parse(localStorage.getItem('pp_session') || '{}');
+    renderUserList(sess.user || ADMIN_USER);
+    mostrarToast('✓ Usuário ' + name + ' criado');
+  } catch(e) { alert('Erro: ' + e.message); }
 }
 
-function removeUser(name){
-  if(!confirm('Remover acesso de '+name+'?')) return;
-  saveUsers(getUsers().filter(u=>u.name!==name));
-  const raw=localStorage.getItem('pp_session');
-  renderUserList(raw?JSON.parse(raw).user:ADMIN_USER);
+async function removeUser(nome) {
+  if (!confirm('Remover acesso de ' + nome + '?')) return;
+  try {
+    await apiDelete('/api/usuarios/' + nome);
+    _usuarios = await apiGet('/api/usuarios');
+    const sess = JSON.parse(localStorage.getItem('pp_session') || '{}');
+    renderUserList(sess.user || ADMIN_USER);
+  } catch(e) { alert('Erro: ' + e.message); }
 }
 
-function renderUserList(currentUser){
-  const el=document.getElementById('userList');
-  if(!el) return;
-  const isAdmin=currentUser===ADMIN_USER;
-  const users=getUsers();
-  let html=`<div class="user-list-item"><span>👑 ${ADMIN_USER}</span><span style="font-size:9px;color:var(--green-mid)">master</span></div>`;
-  users.forEach(u=>{
-    html+=`<div class="user-list-item"><span>${u.name}</span>${isAdmin?`<button onclick="removeUser('${u.name}')" style="background:none;border:none;color:rgba(192,57,43,.7);cursor:pointer;font-size:11px">✕</button>`:''}</div>`;
+function renderUserList(currentUser) {
+  const el = document.getElementById('userList');
+  if (!el) return;
+  const isAdmin = currentUser === ADMIN_USER;
+  let html = `<div class="user-list-item"><span>👑 ${ADMIN_USER}</span><span style="font-size:9px;color:var(--green-mid)">master</span></div>`;
+  (_usuarios || []).filter(u => u.nome !== ADMIN_USER).forEach(u => {
+    html += `<div class="user-list-item"><span>${u.nome}</span>${isAdmin ? `<button onclick="removeUser('${u.nome}')" style="background:none;border:none;color:rgba(192,57,43,.7);cursor:pointer;font-size:11px">✕</button>` : ''}</div>`;
   });
-  el.innerHTML=html;
+  el.innerHTML = html;
+}
+
+// Restaurar KML da API
+async function restaurarKMLdaAPI(id) {
+  try {
+    const kml = await apiGet('/api/fazendas/' + id + '/kml');
+    if (!kml || !kml.kml_texto) return;
+    const nomeEl = document.getElementById('kmzNome');
+    if (nomeEl) nomeEl.textContent = kml.kml_nome || 'KML salvo';
+    const blob = new Blob([kml.kml_texto], { type: 'application/vnd.google-earth.kml+xml' });
+    const fakeFile = new File([blob], kml.kml_nome || 'fazenda.kml');
+    processarKMLParaMapa(fakeFile).catch(e => console.warn('Restaurar KML:', e));
+    document.getElementById('btnExportKML').style.display = '';
+    document.getElementById('btnResetMapa').style.display = '';
+  } catch(e) { /* sem KML salvo */ }
+}
+
+// Salvar KML na API (chamado após upload)
+async function salvarKMLnaAPI(kmlNome, kmlTexto) {
+  const id = dbGet('fazenda_ativa', null);
+  if (!id) return;
+  try {
+    // Garante que existe registro de dados_basicos primeiro
+    await apiPut('/api/fazendas/' + id + '/kml', { kmlNome, kmlTexto });
+  } catch(e) { console.warn('KML não salvo na API:', e); }
 }
 
 // ── INIT ─────────────────────────────────────────────────────────
@@ -1437,7 +1611,6 @@ function renderUserList(currentUser){
 })();
 
 buildGridHead();
-renderCadastro();
 initLogin();
 
 async function handleKMZ(input) {
@@ -1467,16 +1640,8 @@ async function handleKMZ(input) {
       kmlText = await file.text();
     }
 
-    // Salvar KML bruto no localStorage para restauração futura
-    const fazId = dbGet('fazenda_ativa', null);
-    if (fazId) {
-      try {
-        dbSet('kml_' + fazId, { nome: file.name, texto: kmlText, savedAt: new Date().toISOString() });
-      } catch(e) {
-        // KML muito grande para localStorage — ignorar silenciosamente
-        console.warn('KML não salvo (arquivo muito grande):', e);
-      }
-    }
+    // Salvar KML na API (nuvem)
+    salvarKMLnaAPI(file.name, kmlText).catch(e => console.warn('KML API save:', e));
 
     // Extrair coordenadas do KML
     const coords = extractKMLCoords(kmlText);
