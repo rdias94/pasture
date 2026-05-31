@@ -201,6 +201,9 @@ body{font-family:var(--font);background:var(--gray-50);color:var(--gray-900);fon
     <div class="nav-item" id="nav4" onclick="showPanel(4)"><span>04</span> Laudos &amp; Cotações<span class="nav-num" id="nn4"></span></div>
     <div class="nav-item" id="nav5" onclick="showPanel(5)"><span>05</span> Gerar Plano<span class="nav-num" id="nn5"></span></div>
   </nav>
+  <div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,.06)">
+    <button id="btnSalvarTudo" onclick="salvarTudo()" style="width:100%;padding:9px;background:var(--green);border:none;border-radius:7px;color:#fff;font-size:12px;font-weight:600;font-family:var(--font);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:background .15s" onmouseover="this.style.background='#155f3f'" onmouseout="this.style.background='var(--green)'">💾 Salvar tudo</button>
+  </div>
   <div id="userMenuBtn" onclick="toggleUserPanel()">
     <span style="font-size:15px">👤</span><span id="userMenuLabel">—</span><span style="margin-left:auto;font-size:9px">▲</span>
   </div>
@@ -776,7 +779,7 @@ async function abrirModalFazenda(grupoIdPre) {
 function renderConsultoresModal(selecionados) {
   const users = getUsers();
   const el = document.getElementById('mfConsultores');
-  const consultores = users.filter(u => u.name !== ADMIN_USER);
+  const consultores = users.filter(u => (u.nome || u.name) !== ADMIN_USER);
   if (consultores.length === 0) { el.innerHTML = '<span style="font-size:11px;color:var(--gray-400)">Nenhum consultor cadastrado</span>'; return; }
   el.innerHTML = consultores.map(u =>
     `<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:3px 8px;border:1px solid var(--gray-200);border-radius:6px">
@@ -883,7 +886,7 @@ function limparEstadoFazenda() {
 }
 
 function atualizarBarraFazenda() {
-  const f = getFazendaAtiva();
+  const f = fazendaAtiva;
   const el = document.getElementById('sidebarFazenda');
   if (f) {
     if (el) el.textContent = f.nome;
@@ -909,8 +912,8 @@ async function salvarDadosBasicos() {
     coordLat: coordParts[0] ? parseFloat(coordParts[0]) : null,
     coordLon: coordParts[1] ? parseFloat(coordParts[1]) : null,
     chuva: MESES.map((_,i) => { const el = document.getElementById('chuva_'+i); return el ? parseFloat(el.value)||0 : 0; }),
-    kmlNome: document.getElementById('kmzNome').textContent || null,
-    kmlTexto: null  // KML salvo separadamente via salvarKML()
+    kmlNome: document.getElementById('kmzNome').textContent || null
+    // kmlTexto NÃO enviado aqui — salvo separadamente via salvarKMLnaAPI()
   };
   try {
     await apiPut('/api/fazendas/' + id + '/dados', body);
@@ -1232,28 +1235,86 @@ function calcBalanco() {
   updateAreaStats();
 }
 
-function renderBalancoChart(pastejo,seq,carga) {
-  const ctx=document.getElementById('balancoChart');
-  if(!ctx) return;
-  if(_balChart) _balChart.destroy();
-  _balChart=new Chart(ctx,{
-    type:'bar',
-    data:{
-      labels:MESES,
-      datasets:[
-        {label:'Pastejo (UA)',data:pastejo,backgroundColor:'rgba(45,160,107,0.7)',stack:'sup'},
-        {label:'Sequestro (UA)',data:seq,backgroundColor:'rgba(184,108,0,0.7)',stack:'sup'},
-        {label:'Carga (UA)',data:Array(12).fill(carga),type:'line',borderColor:'#c0392b',borderWidth:2.5,pointRadius:3,borderDash:[6,3],fill:false}
-      ]
+function renderBalancoChart(pastejo, seq, carga) {
+  const ctx = document.getElementById('balancoChart');
+  if (!ctx) return;
+  if (_balChart) _balChart.destroy();
+
+  // Diferimento: pastos com nível "Diferimento" (futuro) — por ora array zero
+  // Estrutura empilhada: Pastejo (verde) | Sequestro (laranja) | Diferimento (verde-acastanhado)
+  // Linha de carga em vermelho por cima
+
+  _balChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: MESES,
+      datasets: [
+        {
+          label: 'Pastejo (UA)',
+          data: pastejo,
+          backgroundColor: 'rgba(45,160,107,0.80)',
+          borderColor: 'rgba(45,160,107,1)',
+          borderWidth: 0,
+          stack: 'suporte',
+          order: 2,
+        },
+        {
+          label: 'Sequestro / Silagem (UA)',
+          data: seq,
+          backgroundColor: 'rgba(210,120,0,0.82)',
+          borderColor: 'rgba(210,120,0,1)',
+          borderWidth: 0,
+          stack: 'suporte',
+          order: 2,
+        },
+        {
+          label: 'Carga animal (UA)',
+          data: Array(12).fill(carga || 0),
+          type: 'line',
+          borderColor: '#c0392b',
+          backgroundColor: 'rgba(192,57,43,0.08)',
+          borderWidth: 2.5,
+          pointRadius: 4,
+          pointBackgroundColor: '#c0392b',
+          borderDash: [6, 3],
+          fill: false,
+          order: 1,
+          stack: undefined,
+        },
+      ],
     },
-    options:{
-      responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{position:'top',labels:{font:{size:11,family:'IBM Plex Sans'},padding:12}}},
-      scales:{
-        x:{stacked:true,grid:{display:false},ticks:{font:{size:10,family:'IBM Plex Mono'}}},
-        y:{stacked:false,title:{display:true,text:'UA',font:{size:10}},ticks:{font:{size:10,family:'IBM Plex Mono'}}}
-      }
-    }
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { font: { size: 11, family: 'IBM Plex Sans' }, padding: 14, usePointStyle: true },
+        },
+        tooltip: {
+          callbacks: {
+            footer: (items) => {
+              const total = items.filter(i => i.dataset.stack === 'suporte').reduce((s, i) => s + (i.parsed.y || 0), 0);
+              return carga > 0 ? 'Saldo: ' + (total - carga).toFixed(0) + ' UA' : 'Total: ' + total.toFixed(0) + ' UA';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          stacked: true,
+          grid: { display: false },
+          ticks: { font: { size: 10, family: 'IBM Plex Mono' } },
+        },
+        y: {
+          stacked: true,
+          title: { display: true, text: 'UA', font: { size: 10 } },
+          ticks: { font: { size: 10, family: 'IBM Plex Mono' } },
+          grid: { color: 'rgba(0,0,0,0.05)' },
+        },
+      },
+    },
   });
 }
 
@@ -1379,6 +1440,29 @@ function resetarMapa() {
   if(nomeEl) nomeEl.textContent = 'Clique para selecionar KML / KMZ';
   // KML na nuvem é mantido — apenas o mapa visual é limpo
   areas=[]; areaCount=0; buildGridRows(); calcBalanco();
+}
+
+
+// ── SALVAR TUDO ──────────────────────────────────────────────────
+async function salvarTudo() {
+  const id = dbGet('fazenda_ativa', null);
+  if (!id) { alert('Selecione uma fazenda primeiro'); return; }
+
+  const btn = document.getElementById('btnSalvarTudo');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Salvando...'; }
+
+  const erros = [];
+  try { await salvarDadosBasicos(); } catch(e) { erros.push('Dados Básicos: ' + e.message); }
+  try { await salvarRegua(); } catch(e) { erros.push('Régua: ' + e.message); }
+  try { await salvarOF(); } catch(e) { erros.push('Orç. Forrageira: ' + e.message); }
+
+  if (btn) { btn.disabled = false; btn.textContent = '💾 Salvar tudo'; }
+
+  if (erros.length > 0) {
+    alert('Erros ao salvar:\n' + erros.join('\n'));
+  } else {
+    mostrarToast('✓ Tudo salvo com sucesso');
+  }
 }
 
 // ── NAVEGAÇÃO ────────────────────────────────────────────────────
