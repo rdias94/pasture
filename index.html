@@ -3063,6 +3063,9 @@ async function handleKMZ(input) {
       kmlText = await file.text();
     }
 
+    // Salvar KML na API (nuvem) — persiste o texto do KML no D1
+    salvarKMLnaAPI(file.name, kmlText).catch(e => console.warn('KML API save:', e));
+
     // Extrair coordenadas do KML
     const coords = extractKMLCoords(kmlText);
     if (!coords) throw new Error('Coordenadas não encontradas no arquivo');
