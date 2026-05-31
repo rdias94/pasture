@@ -1658,24 +1658,22 @@ function renderUserList(currentUser) {
 async function restaurarKMLdaAPI(id) {
   try {
     const kml = await apiGet('/api/fazendas/' + id + '/kml');
-    if (!kml || !kml.kml_texto) return;
+    if (!kml || !kml.estrutura) return;
     const nomeEl = document.getElementById('kmzNome');
     if (nomeEl) nomeEl.textContent = kml.kml_nome || 'KML salvo';
-    const blob = new Blob([kml.kml_texto], { type: 'application/vnd.google-earth.kml+xml' });
-    const fakeFile = new File([blob], kml.kml_nome || 'fazenda.kml');
-    processarKMLParaMapa(fakeFile).catch(e => console.warn('Restaurar KML:', e));
+    // Renderiza direto da estrutura parseada (sem reler/reparsear arquivo)
+    renderKMLHierarquia(kml.estrutura);
     document.getElementById('btnExportKML').style.display = '';
     document.getElementById('btnResetMapa').style.display = '';
-  } catch(e) { /* sem KML salvo */ }
+  } catch(e) { console.warn('Restaurar KML:', e); }
 }
 
-// Salvar KML na API (chamado após upload)
-async function salvarKMLnaAPI(kmlNome, kmlTexto) {
+// Persiste o KML: arquivo cru -> R2, estrutura parseada -> D1
+async function salvarKMLnaAPI(kmlNome, kmlTexto, estrutura) {
   const id = dbGet('fazenda_ativa', null);
   if (!id) return;
   try {
-    // Garante que existe registro de dados_basicos primeiro
-    await apiPut('/api/fazendas/' + id + '/kml', { kmlNome, kmlTexto });
+    await apiPut('/api/fazendas/' + id + '/kml', { kmlNome, kmlTexto, estrutura });
   } catch(e) { console.warn('KML não salvo na API:', e); }
 }
 
@@ -2209,16 +2207,14 @@ function importarModulosParaGrade(hier) {
 }
 
 // ── Função principal chamada pelo handleKMZ ─────────────────────
+// Lê o arquivo (kmz/kml), PARSEIA a estrutura e renderiza. Retorna o KML cru
+// (texto) para o chamador persistir; deixa a estrutura em `kmlHierarquia`.
 async function processarKMLParaMapa(file) {
   const status = document.getElementById('mapaStatus');
   status.textContent = '⏳ Lendo estrutura...';
-  _corIdx = 0;
-  Object.keys(_setorCores).forEach(k => delete _setorCores[k]);
-
   try {
     let kmlText = '';
     // Detecta KMZ pelos BYTES, não pela extensão: ZIP começa com "PK" (0x50 0x4B).
-    // KML restaurado do banco é texto cru (já descompactado) mesmo que o nome seja .kmz.
     const head = new Uint8Array(await file.slice(0, 2).arrayBuffer());
     const isZip = head[0] === 0x50 && head[1] === 0x4B;
     if (isZip) {
@@ -2230,45 +2226,55 @@ async function processarKMLParaMapa(file) {
     } else {
       kmlText = await file.text();
     }
-
-    kmlHierarquia = parseKMLHierarquia(kmlText);
-
-    const todosModulos = kmlHierarquia.retiros.flatMap(r => r.setores).flatMap(s => s.modulos);
-    const todosPiquetes = todosModulos.flatMap(m => m.piquetes);
-    const todosSoltos = kmlHierarquia.retiros.flatMap(r => [...r.setores.flatMap(s => s.piquetesSoltos), ...r.piquetesSoltos]);
-
-    if (todosModulos.length === 0 && todosSoltos.length === 0 && !kmlHierarquia.perimetro) {
-      throw new Error('Nenhuma geometria encontrada no arquivo');
-    }
-
-    // Centro do mapa
-    const allCoords = [
-      ...(kmlHierarquia.perimetro?.coords || []),
-      ...todosPiquetes.flatMap(p => p.coords),
-      ...todosSoltos.flatMap(p => p.coords)
-    ];
-    const centerLat = allCoords.reduce((s, c) => s + c[1], 0) / allCoords.length;
-    const centerLon = allCoords.reduce((s, c) => s + c[0], 0) / allCoords.length;
-
-    iniciarMapa(centerLat, centerLon);
-    renderizarHierarquia(kmlHierarquia);
-    renderizarPainelHierarquia(kmlHierarquia);
-
-    // Preencher nome da fazenda se vazio
-    const campoNome = document.getElementById('nomeFazenda');
-    if (campoNome && !campoNome.value) campoNome.value = kmlHierarquia.nomeFazenda;
-
-    // Salvar coordenadas para busca climática
-    document.getElementById('coordFaz').value = centerLat.toFixed(5) + ', ' + centerLon.toFixed(5);
-    document.getElementById('btnResetMapa').style.display = 'inline-flex';
-
-    const nSetores = kmlHierarquia.retiros.flatMap(r => r.setores).filter(s => s.nome).length;
-    status.textContent = '✓ ' + (nSetores > 0 ? nSetores + ' setor(es) · ' : '') + todosModulos.length + ' módulo(s) · ' + todosPiquetes.length + ' piquete(s)';
-
+    const estrutura = parseKMLHierarquia(kmlText);
+    renderKMLHierarquia(estrutura);
+    return kmlText;
   } catch (e) {
     status.textContent = '✗ Erro: ' + e.message;
     console.error(e);
+    return null;
   }
+}
+
+// Renderiza o mapa a partir de uma estrutura JÁ parseada — sem reler/reparsear
+// arquivo. Usado tanto na importação quanto ao restaurar do banco (D1).
+function renderKMLHierarquia(estrutura) {
+  const status = document.getElementById('mapaStatus');
+  _corIdx = 0;
+  Object.keys(_setorCores).forEach(k => delete _setorCores[k]);
+  kmlHierarquia = estrutura;
+
+  const todosModulos = kmlHierarquia.retiros.flatMap(r => r.setores).flatMap(s => s.modulos);
+  const todosPiquetes = todosModulos.flatMap(m => m.piquetes);
+  const todosSoltos = kmlHierarquia.retiros.flatMap(r => [...r.setores.flatMap(s => s.piquetesSoltos), ...r.piquetesSoltos]);
+
+  if (todosModulos.length === 0 && todosSoltos.length === 0 && !kmlHierarquia.perimetro) {
+    throw new Error('Nenhuma geometria encontrada no arquivo');
+  }
+
+  // Centro do mapa
+  const allCoords = [
+    ...(kmlHierarquia.perimetro?.coords || []),
+    ...todosPiquetes.flatMap(p => p.coords),
+    ...todosSoltos.flatMap(p => p.coords)
+  ];
+  const centerLat = allCoords.reduce((s, c) => s + c[1], 0) / allCoords.length;
+  const centerLon = allCoords.reduce((s, c) => s + c[0], 0) / allCoords.length;
+
+  iniciarMapa(centerLat, centerLon);
+  renderizarHierarquia(kmlHierarquia);
+  renderizarPainelHierarquia(kmlHierarquia);
+
+  // Preencher nome da fazenda se vazio
+  const campoNome = document.getElementById('nomeFazenda');
+  if (campoNome && !campoNome.value) campoNome.value = kmlHierarquia.nomeFazenda;
+
+  // Salvar coordenadas para busca climática
+  document.getElementById('coordFaz').value = centerLat.toFixed(5) + ', ' + centerLon.toFixed(5);
+  document.getElementById('btnResetMapa').style.display = 'inline-flex';
+
+  const nSetores = kmlHierarquia.retiros.flatMap(r => r.setores).filter(s => s.nome).length;
+  status.textContent = '✓ ' + (nSetores > 0 ? nSetores + ' setor(es) · ' : '') + todosModulos.length + ' módulo(s) · ' + todosPiquetes.length + ' piquete(s)';
 }
 
 // ── Reset do mapa ───────────────────────────────────────────────
@@ -2855,30 +2861,18 @@ async function handleKMZ(input) {
   if (!file) return;
   document.getElementById('kmzNome').textContent = file.name;
 
-  // Processar para mapa estruturado
-  processarKMLParaMapa(file).catch(e => console.warn('Mapa KML:', e));
-
   const status = document.getElementById('chuvaStatus');
   status.textContent = '⏳ Lendo arquivo...';
   status.style.color = 'var(--gray-400)';
 
   try {
-    let kmlText = '';
+    // Parseia + renderiza o mapa UMA vez; devolve o KML cru e deixa a
+    // estrutura em `kmlHierarquia`.
+    const kmlText = await processarKMLParaMapa(file);
+    if (!kmlText) throw new Error('Não foi possível ler o KML do arquivo');
 
-    if (file.name.toLowerCase().endsWith('.kmz')) {
-      // KMZ é um ZIP — precisamos descompactar via JSZip
-      const JSZip = await loadJSZip();
-      const zip = await JSZip.loadAsync(file);
-      // Procurar o primeiro .kml dentro do zip
-      const kmlFile = Object.values(zip.files).find(f => f.name.toLowerCase().endsWith('.kml'));
-      if (!kmlFile) throw new Error('Nenhum .kml encontrado dentro do .kmz');
-      kmlText = await kmlFile.async('string');
-    } else {
-      kmlText = await file.text();
-    }
-
-    // Salvar KML na API (nuvem) — persiste o texto do KML no D1
-    salvarKMLnaAPI(file.name, kmlText).catch(e => console.warn('KML API save:', e));
+    // Persiste: arquivo cru -> R2, estrutura parseada -> D1
+    salvarKMLnaAPI(file.name, kmlText, kmlHierarquia).catch(e => console.warn('KML API save:', e));
 
     // Extrair coordenadas do KML
     const coords = extractKMLCoords(kmlText);

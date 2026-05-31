@@ -222,25 +222,55 @@ export default {
     }
 
     // ── KML (só o texto, separado para não pesar nas listagens) ───
+    // KML: ESTRUTURA parseada vive no D1 (render sem reparse);
+    //      ARQUIVO original vive no R2 (binding FILES), só p/ export/auditoria.
     const mKml = path.match(/^\/api\/fazendas\/([\w-]+)\/kml$/);
     if (mKml) {
       const fazId = mKml[1];
+      const r2Key = `kml/${fazId}.kml`;
       if (method === 'GET') {
         const row = await env.DB.prepare(
-          'SELECT kml_nome, kml_texto FROM dados_basicos WHERE fazenda_id=?'
+          'SELECT kml_nome, kml_r2_key, kml_estrutura_json FROM dados_basicos WHERE fazenda_id=?'
         ).bind(fazId).first();
-        return json(row || null);
+        if (!row) return json(null);
+        return json({
+          kml_nome: row.kml_nome,
+          kml_r2_key: row.kml_r2_key,
+          estrutura: row.kml_estrutura_json ? JSON.parse(row.kml_estrutura_json) : null,
+        });
       }
       if (method === 'PUT') {
         const b = await request.json();
-        // Upsert: insert if not exists, then update kml fields
+        // arquivo original -> R2
+        if (b.kmlTexto) {
+          await env.FILES.put(r2Key, b.kmlTexto, {
+            httpMetadata: { contentType: 'application/vnd.google-earth.kml+xml' },
+          });
+        }
+        // estrutura parseada + metadados -> D1
         await env.DB.prepare(
           'INSERT OR IGNORE INTO dados_basicos (fazenda_id) VALUES (?)'
         ).bind(fazId).run();
         await env.DB.prepare(
-          'UPDATE dados_basicos SET kml_nome=?,kml_texto=?,atualizado_em=datetime("now") WHERE fazenda_id=?'
-        ).bind(b.kmlNome, b.kmlTexto, fazId).run();
+          "UPDATE dados_basicos SET kml_nome=?, kml_estrutura_json=?, kml_r2_key=?, atualizado_em=datetime('now') WHERE fazenda_id=?"
+        ).bind(
+          b.kmlNome || null,
+          b.estrutura ? JSON.stringify(b.estrutura) : null,
+          b.kmlTexto ? r2Key : null,
+          fazId
+        ).run();
         return json({ ok: true });
+      }
+    }
+
+    // Download do arquivo KML original (do R2) — usado p/ exportar.
+    const mArq = path.match(/^\/api\/fazendas\/([\w-]+)\/arquivo$/);
+    if (mArq) {
+      const fazId = mArq[1];
+      if (method === 'GET') {
+        const obj = await env.FILES.get(`kml/${fazId}.kml`);
+        if (!obj) return err('Arquivo não encontrado', 404);
+        return json({ kmlTexto: await obj.text() });
       }
     }
 

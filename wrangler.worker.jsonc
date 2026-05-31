@@ -13,5 +13,11 @@
       "database_name": "pasture-db",
       "database_id": "b24c5d07-670b-4a08-86fe-1fd111f02d2d"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "pasture-files"
+    }
   ]
 }

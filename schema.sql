@@ -49,7 +49,9 @@ CREATE TABLE IF NOT EXISTS dados_basicos (
   coord_lon        REAL,
   chuva_json       TEXT,
   kml_nome         TEXT,
-  kml_texto        TEXT,
+  kml_texto        TEXT,                 -- legado (KML cru); migrado p/ R2 + estrutura
+  kml_estrutura_json TEXT,               -- estrutura parseada (render sem reparse)
+  kml_r2_key       TEXT,                 -- chave do arquivo original no bucket R2
   atualizado_em    TEXT DEFAULT (datetime('now'))
 );
 
