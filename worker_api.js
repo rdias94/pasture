@@ -193,29 +193,29 @@ export default {
       }
       if (method === 'PUT') {
         const b = await request.json();
-        // Check if row already exists (to preserve kml_texto)
-        const existing = await env.DB.prepare(
-          'SELECT kml_nome, kml_texto FROM dados_basicos WHERE fazenda_id=?'
-        ).bind(fazId).first();
-
-        const kmlNome = b.kmlNome || existing?.kml_nome || null;
-        const kmlTexto = b.kmlTexto || existing?.kml_texto || null;
-
+        // Upsert SEM tocar em kml_nome/kml_texto — KML é gerido só por /kml,
+        // evitando qualquer corrida que apague o KML salvo.
+        await env.DB.prepare(
+          'INSERT OR IGNORE INTO dados_basicos (fazenda_id) VALUES (?)'
+        ).bind(fazId).run();
         await env.DB.prepare(`
-          INSERT OR REPLACE INTO dados_basicos
-            (fazenda_id,nome_fazenda,municipio,uf,area_total_ha,area_pastagem_ha,coord_lat,coord_lon,chuva_json,kml_nome,kml_texto,atualizado_em)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+          UPDATE dados_basicos SET
+            nome_fazenda=?, municipio=?, uf=?,
+            area_total_ha=?, area_pastagem_ha=?,
+            coord_lat=?, coord_lon=?, chuva_json=?,
+            atualizado_em=datetime('now')
+          WHERE fazenda_id=?
         `).bind(
-          fazId, b.nomeFazenda, b.municipio, b.uf,
+          b.nomeFazenda || null, b.municipio || null, b.uf || null,
           b.areaTotalHa || null, b.areaPastagemHa || null,
           b.coordLat || null, b.coordLon || null,
           JSON.stringify(b.chuva || []),
-          kmlNome, kmlTexto
+          fazId
         ).run();
         // Atualizar fazenda também
         await env.DB.prepare(
           'UPDATE fazendas SET municipio=?,uf=?,area_total_ha=?,atualizado_em=datetime("now") WHERE id=?'
-        ).bind(b.municipio, b.uf, b.areaTotalHa || null, fazId).run();
+        ).bind(b.municipio || null, b.uf || null, b.areaTotalHa || null, fazId).run();
         return json({ ok: true });
       }
     }

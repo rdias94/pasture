@@ -1723,7 +1723,7 @@ initLogin();
 async function handleKMZ(input) {
   const file = input.files[0];
   if (!file) return;
-  document.getElementById('kmzNome').value = file.name;
+  document.getElementById('kmzNome').textContent = file.name;
 
   // Processar para mapa estruturado
   processarKMLParaMapa(file).catch(e => console.warn('Mapa KML:', e));
@@ -3039,7 +3039,7 @@ async function reverseGeocode(lat, lon) {
 async function handleKMZ(input) {
   const file = input.files[0];
   if (!file) return;
-  document.getElementById('kmzNome').value = file.name;
+  document.getElementById('kmzNome').textContent = file.name;
 
   // Processar para mapa estruturado
   processarKMLParaMapa(file).catch(e => console.warn('Mapa KML:', e));
