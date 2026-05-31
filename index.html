@@ -2217,7 +2217,11 @@ async function processarKMLParaMapa(file) {
 
   try {
     let kmlText = '';
-    if (file.name.toLowerCase().endsWith('.kmz')) {
+    // Detecta KMZ pelos BYTES, não pela extensão: ZIP começa com "PK" (0x50 0x4B).
+    // KML restaurado do banco é texto cru (já descompactado) mesmo que o nome seja .kmz.
+    const head = new Uint8Array(await file.slice(0, 2).arrayBuffer());
+    const isZip = head[0] === 0x50 && head[1] === 0x4B;
+    if (isZip) {
       const JSZip = await loadJSZip();
       const zip = await JSZip.loadAsync(file);
       const kmlFile = Object.values(zip.files).find(f => f.name.toLowerCase().endsWith('.kml'));
